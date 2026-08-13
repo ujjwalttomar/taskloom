@@ -1,0 +1,13 @@
+{
+    "name": "@taskloom/db",
+    "version": "1.0.0",
+    "main": "client.ts",
+    "dependencies": {
+        "@prisma/client": "^6.0.0"
+    },
+    "devDependencies": {
+        "@types/node": "^26.6.2",
+        "prisma": "^6.0.0",
+        "typescript": "^7.0.2"
+    }
+}

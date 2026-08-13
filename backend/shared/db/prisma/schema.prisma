@@ -1,0 +1,127 @@
+generator client {
+    provider        = "prisma-client-js"
+    output          = "../generated/prisma"
+    previewFeatures = ["prismaSchemaFolder"]
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+enum Role {
+    ADMIN
+    EMPLOYEE
+}
+
+model User {
+    id           Int              @id @default(autoincrement())
+    name         String
+    email        String           @unique
+    googleId     String?          @unique
+    createdAt    DateTime         @default(now())
+    updatedAt    DateTime         @updatedAt
+    refreshTokens RefreshToken[]
+    workspaces   WorkspaceMember[]
+    boards       BoardMember[]
+    assignedCards AssignedCard[]
+    comments     Comment[]        @relation("CommentCreator")
+    cards        Card[]           @relation("CardCreator")
+}
+
+model RefreshToken {
+    id        Int      @id @default(autoincrement())
+    token     String   @unique
+    userId    Int
+    expiresAt DateTime
+    createdAt DateTime @default(now())
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Workspace {
+    id          Int               @id @default(autoincrement())
+    name        String
+    description String?
+    createdAt   DateTime          @default(now())
+    updatedAt   DateTime          @updatedAt
+    members     WorkspaceMember[]
+    boards      Board[]
+}
+
+model WorkspaceMember {
+    workspaceId Int
+    memberId    Int
+    role        Role
+    workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+    member      User      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+    @@id([workspaceId, memberId])
+}
+
+model Board {
+    id          Int           @id @default(autoincrement())
+    title       String
+    description String?
+    workspaceId Int
+    createdAt   DateTime      @default(now())
+    updatedAt   DateTime      @updatedAt
+    workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+    members     BoardMember[]
+    lists       List[]
+}
+
+model BoardMember {
+    boardId  Int
+    memberId Int
+    role     Role
+    board    Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+    user     User  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+    @@id([boardId, memberId])
+}
+
+model List {
+    id        Int      @id @default(autoincrement())
+    title     String
+    order     Float
+    boardId   Int
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+    cards     Card[]
+}
+
+model Card {
+    id          Int            @id @default(autoincrement())
+    title       String
+    description String?
+    order       Float
+    listId      Int
+    creatorId   Int?
+    createdAt   DateTime       @default(now())
+    updatedAt   DateTime       @updatedAt
+    list        List           @relation(fields: [listId], references: [id], onDelete: Cascade)
+    creator     User?          @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+    assignedTo  AssignedCard[]
+    comments    Comment[]
+}
+
+model AssignedCard {
+    cardId Int
+    userId Int
+    card   Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+    user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@id([cardId, userId])
+}
+
+model Comment {
+    id        Int      @id @default(autoincrement())
+    text      String
+    cardId    Int
+    creatorId Int?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+    creator   User?    @relation("CommentCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+}

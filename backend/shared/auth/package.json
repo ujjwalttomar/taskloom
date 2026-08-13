@@ -1,0 +1,13 @@
+{
+    "name": "@taskloom/auth",
+    "version": "1.0.0",
+    "main": "token.ts",
+    "dependencies": {
+        "jsonwebtoken": "^9.0.3"
+    },
+    "devDependencies": {
+        "@types/jsonwebtoken": "^9.0.10",
+        "@types/node": "^26.6.2",
+        "typescript": "^7.0.2"
+    }
+}
