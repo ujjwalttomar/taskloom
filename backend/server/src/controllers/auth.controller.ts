@@ -5,6 +5,7 @@ import prisma from "../../../shared/db/client";
 
 let client: OAuth2Client;
 
+// OAuth2Client must be initialized lazily — module-level init runs before dotenv loads env vars
 function getOAuthClient() {
     if (!client) {
         client = new OAuth2Client(
