@@ -143,6 +143,7 @@ export const assignCard = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "User is not a board member" });
         }
 
+        // admins can assign anyone; non-admins can only self-assign
         const isAdmin = req.boardMembership!.role === "ADMIN";
         const isSelfAssign = userId === req.userId;
         if (!isAdmin && !isSelfAssign) {
