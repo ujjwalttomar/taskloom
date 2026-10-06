@@ -1,127 +1,141 @@
 generator client {
-    provider        = "prisma-client-js"
-    output          = "../generated/prisma"
-    previewFeatures = ["prismaSchemaFolder"]
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
-    ADMIN
-    EMPLOYEE
+  ADMIN
+  EMPLOYEE
 }
 
 model User {
-    id           Int              @id @default(autoincrement())
-    name         String
-    email        String           @unique
-    googleId     String?          @unique
-    createdAt    DateTime         @default(now())
-    updatedAt    DateTime         @updatedAt
-    refreshTokens RefreshToken[]
-    workspaces   WorkspaceMember[]
-    boards       BoardMember[]
-    assignedCards AssignedCard[]
-    comments     Comment[]        @relation("CommentCreator")
-    cards        Card[]           @relation("CardCreator")
+  id               Int               @id @default(autoincrement())
+  name             String
+  email            String            @unique
+  googleId         String?
+  comments         Comment[]
+  createdCards     Card[]
+  boardMemberships BoardMember[]
+  assignedCards    AssignedCard[]
+  workspaces       WorkspaceMember[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  refreshTokens    RefreshToken[]
 }
 
 model RefreshToken {
-    id        Int      @id @default(autoincrement())
-    token     String   @unique
-    userId    Int
-    expiresAt DateTime
-    createdAt DateTime @default(now())
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @id
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 }
 
 model Workspace {
-    id          Int               @id @default(autoincrement())
-    name        String
-    description String?
-    createdAt   DateTime          @default(now())
-    updatedAt   DateTime          @updatedAt
-    members     WorkspaceMember[]
-    boards      Board[]
+  id          Int               @id @default(autoincrement())
+  name        String
+  description String?
+  members     WorkspaceMember[]
+  boards      Board[]
+  invites     WorkspaceInvite[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model WorkspaceInvite {
+  id          Int       @id @default(autoincrement())
+  token       String    @unique
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String
+  role        Role      @default(EMPLOYEE)
+  expiresAt   DateTime
+  accepted    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
 }
 
 model WorkspaceMember {
-    workspaceId Int
-    memberId    Int
-    role        Role
-    workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-    member      User      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId    Int
+  user        User      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role        Role
 
-    @@id([workspaceId, memberId])
+  @@id([workspaceId, memberId])
+  @@unique([memberId, workspaceId])
 }
 
 model Board {
-    id          Int           @id @default(autoincrement())
-    title       String
-    description String?
-    workspaceId Int
-    createdAt   DateTime      @default(now())
-    updatedAt   DateTime      @updatedAt
-    workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-    members     BoardMember[]
-    lists       List[]
+  id          Int           @id @default(autoincrement())
+  title       String
+  description String?
+  workspaceId Int
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members     BoardMember[]
+  lists       List[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 }
 
 model BoardMember {
-    boardId  Int
-    memberId Int
-    role     Role
-    board    Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
-    user     User  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId Int
+  user     User  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  boardId  Int
+  board    Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  role     Role
 
-    @@id([boardId, memberId])
+  @@id([boardId, memberId])
+  @@unique([memberId, boardId])
 }
 
 model List {
-    id        Int      @id @default(autoincrement())
-    title     String
-    order     Float
-    boardId   Int
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
-    cards     Card[]
+  id        Int      @id @default(autoincrement())
+  title     String
+  order     Float
+  boardId   Int
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards     Card[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Card {
-    id          Int            @id @default(autoincrement())
-    title       String
-    description String?
-    order       Float
-    listId      Int
-    creatorId   Int?
-    createdAt   DateTime       @default(now())
-    updatedAt   DateTime       @updatedAt
-    list        List           @relation(fields: [listId], references: [id], onDelete: Cascade)
-    creator     User?          @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
-    assignedTo  AssignedCard[]
-    comments    Comment[]
+  id          Int            @id @default(autoincrement())
+  title       String
+  description String?
+  creatorId   Int?
+  creator     User?          @relation(fields: [creatorId], references: [id], onDelete: SetNull)
+  listId      Int
+  list        List           @relation(fields: [listId], references: [id], onDelete: Cascade)
+  order       Float
+  comments    Comment[]
+  assignedTo  AssignedCard[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 }
 
 model AssignedCard {
-    cardId Int
-    userId Int
-    card   Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
-    user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardId Int
+  card   Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
 
-    @@id([cardId, userId])
+  @@id([cardId, userId])
+  @@unique([userId, cardId])
 }
 
 model Comment {
-    id        Int      @id @default(autoincrement())
-    text      String
-    cardId    Int
-    creatorId Int?
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-    creator   User?    @relation("CommentCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  id        Int      @id @default(autoincrement())
+  text      String
+  creatorId Int?
+  creator   User?    @relation(fields: [creatorId], references: [id], onDelete: SetNull)
+  cardId    Int
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
