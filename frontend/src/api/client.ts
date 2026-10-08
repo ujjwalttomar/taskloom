@@ -85,6 +85,11 @@ export const api = {
             }),
         delete: (boardId: number, listId: number) =>
             request<{ listId: number }>(`/api/boards/${boardId}/lists/${listId}`, { method: "DELETE" }),
+        reorder: (boardId: number, listId: number, data: { afterListId?: number; beforeListId?: number }) =>
+            request<{ list: import("../types").List }>(`/api/boards/${boardId}/lists/${listId}/order`, {
+                method: "PATCH",
+                body: JSON.stringify(data),
+            }),
     },
 
     // ─── Cards ───────────────────────────────────────────
@@ -130,5 +135,26 @@ export const api = {
             }),
         delete: (commentId: number) =>
             request<{ commentId: number }>(`/api/comments/${commentId}`, { method: "DELETE" }),
+    },
+
+    // ─── Invites ─────────────────────────────────────────
+
+    invites: {
+        send: (workspaceId: number, data: { email: string; role?: string }) =>
+            request<{ message: string }>(`/api/workspaces/${workspaceId}/invites`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            }),
+        getDetails: (token: string) =>
+            request<{
+                workspace: { name: string; description?: string };
+                email: string;
+                role: string;
+                expiresAt: string;
+            }>(`/api/invites/${token}`),
+        accept: (token: string) =>
+            request<{ message: string; workspaceId: number }>(`/api/invites/${token}/accept`, {
+                method: "POST",
+            }),
     },
 };

@@ -4,6 +4,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { BoardPage } from "./pages/BoardPage";
+import { InvitePage } from "./pages/InvitePage";
 
 export default function App() {
     return (
@@ -11,6 +12,7 @@ export default function App() {
             <BrowserRouter>
                 <Routes>
                     <Route path="/" element={<LoginPage />} />
+                    <Route path="/invite/:token" element={<InvitePage />} />
                     <Route
                         path="/dashboard"
                         element={
