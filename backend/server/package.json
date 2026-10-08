@@ -12,13 +12,15 @@
         "express": "^5.2.1",
         "google-auth-library": "^11.1.0",
         "ioredis": "^6.0.0",
-        "jsonwebtoken": "^9.0.3"
+        "jsonwebtoken": "^9.0.3",
+        "nodemailer": "^6.9.16"
     },
     "devDependencies": {
         "@types/cookie-parser": "^1.4.10",
         "@types/cors": "^2.8.19",
         "@types/express": "^5.0.6",
         "@types/jsonwebtoken": "^9.0.10",
+        "@types/nodemailer": "^6.4.17",
         "@types/node": "^26.6.2",
         "tsx": "^4.23.15",
         "typescript": "^7.0.2"
