@@ -11,7 +11,7 @@ interface AuthenticatedSocket extends WebSocket {
     boardId?: number;
 }
 
-const subscriber = new Redis();
+const subscriber = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
 const rooms = new Map<number, Set<AuthenticatedSocket>>();
 
 const server = http.createServer();

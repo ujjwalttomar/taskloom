@@ -31,7 +31,7 @@ export function InvitePage() {
         if (!token) return;
         setAccepting(true);
         try {
-            const data = await api.invites.accept(token);
+            await api.invites.accept(token);
             setAccepted(true);
             setTimeout(() => navigate(`/dashboard`), 1500);
         } catch (err: any) {

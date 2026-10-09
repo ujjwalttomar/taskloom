@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { WsEvent } from "../types";
 
-const WS_URL = "ws://localhost:3001";
+const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:3001";
 
 export function useWebSocket(boardId: number | null, onEvent: (event: WsEvent) => void) {
     const wsRef = useRef<WebSocket | null>(null);
