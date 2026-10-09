@@ -118,7 +118,7 @@ function parseCookies(cookieHeader: string): Record<string, string> {
     return cookies;
 }
 
-const PORT = process.env.WS_PORT || 3001;
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
     console.log(`WS server running on port ${PORT}`);
 });
