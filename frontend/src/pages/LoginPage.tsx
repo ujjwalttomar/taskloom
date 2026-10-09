@@ -69,7 +69,7 @@ export function LoginPage() {
                     <p className="text-slate-400 mb-10">Sign in to your workspace</p>
 
                     <a
-                        href="http://localhost:3000/auth/google"
+                        href={`${import.meta.env.VITE_API_URL ?? "http://localhost:3000"}/auth/google`}
                         className="flex items-center justify-center gap-3 w-full bg-white text-gray-800 font-medium py-3 px-4 rounded-xl hover:bg-gray-100 transition-all duration-150 shadow-lg shadow-black/20"
                     >
                         <svg width="20" height="20" viewBox="0 0 20 20">
