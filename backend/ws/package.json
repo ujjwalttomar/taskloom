@@ -5,7 +5,9 @@
         "dev": "tsx watch src/server.ts"
     },
     "dependencies": {
+        "dotenv": "^18.0.1",
         "ioredis": "^6.0.0",
+        "jsonwebtoken": "^9.0.3",
         "ws": "^8.22.0"
     },
     "devDependencies": {
