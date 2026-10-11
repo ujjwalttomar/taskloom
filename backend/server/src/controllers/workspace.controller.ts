@@ -10,6 +10,7 @@ export const getAllWorkspaces = async (req: Request, res: Response) => {
         });
         return res.status(200).json({ workspaces });
     } catch (error) {
+        console.error("[getAllWorkspaces error]", error);
         return res.status(500).json({ message: "Server error" });
     }
 };
