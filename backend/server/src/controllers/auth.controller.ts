@@ -77,14 +77,14 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
         res.cookie("accessToken", accessToken, {
             httpOnly: true,
             secure: isProduction,
-            sameSite: "strict",
+            sameSite: isProduction ? "none" : "strict",
             maxAge: 15 * 60 * 1000,
         });
 
         res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
             secure: isProduction,
-            sameSite: "strict",
+            sameSite: isProduction ? "none" : "strict",
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
@@ -116,7 +116,7 @@ export const refreshAccessToken = async (req: Request, res: Response) => {
         res.cookie("accessToken", accessToken, {
             httpOnly: true,
             secure: isProduction,
-            sameSite: "strict",
+            sameSite: isProduction ? "none" : "strict",
             maxAge: 15 * 60 * 1000,
         });
 
@@ -148,8 +148,9 @@ export const logoutUser = async (req: Request, res: Response) => {
         if (refreshToken) {
             await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
         }
-        res.clearCookie("accessToken");
-        res.clearCookie("refreshToken");
+        const cookieOpts = { httpOnly: true, secure: isProduction, sameSite: isProduction ? "none" as const : "strict" as const };
+        res.clearCookie("accessToken", cookieOpts);
+        res.clearCookie("refreshToken", cookieOpts);
         res.status(200).json({ message: "logged out successfully!" });
     } catch (error) {
         res.status(500).json({ message: "Server error" });
