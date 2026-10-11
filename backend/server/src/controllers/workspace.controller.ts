@@ -6,11 +6,10 @@ export const getAllWorkspaces = async (req: Request, res: Response) => {
         const userId = req.userId!;
         const workspaces = await prisma.workspace.findMany({
             where: { members: { some: { memberId: userId } } },
-            include: { members: { include: { member: true } } },
+            include: { members: { include: { user: true } } },
         });
         return res.status(200).json({ workspaces });
     } catch (error) {
-        console.error("[getAllWorkspaces error]", error);
         return res.status(500).json({ message: "Server error" });
     }
 };
@@ -22,7 +21,7 @@ export const getSpecificWorkspace = async (req: Request, res: Response) => {
             where: { id: workspaceId },
             include: {
                 boards: true,
-                members: { include: { member: true } },
+                members: { include: { user: true } },
             },
         });
         if (!workspace) return res.status(404).json({ message: "Workspace not found" });
