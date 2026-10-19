@@ -28,20 +28,15 @@ export function DashboardPage() {
     const [savingWsName, setSavingWsName] = useState(false);
     const [deletingWs, setDeletingWs] = useState(false);
 
-    // Add member state
-    const [addMemberEmail, setAddMemberEmail] = useState("");
-    const [addMemberRole, setAddMemberRole] = useState("EMPLOYEE");
-    const [addMemberLoading, setAddMemberLoading] = useState(false);
-    const [addMemberError, setAddMemberError] = useState("");
+    // Unified add/invite state
+    const [addEmail, setAddEmail] = useState("");
+    const [addRole, setAddRole] = useState("EMPLOYEE");
+    const [addLoading, setAddLoading] = useState(false);
+    const [addMsg, setAddMsg] = useState("");
+    const [addMsgType, setAddMsgType] = useState<"success" | "error">("success");
 
     // Remove member state
     const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
-
-    // Invite via email state
-    const [inviteEmail, setInviteEmail] = useState("");
-    const [inviteRole, setInviteRole] = useState("EMPLOYEE");
-    const [inviteLoading, setInviteLoading] = useState(false);
-    const [inviteMsg, setInviteMsg] = useState("");
 
     const refreshWorkspaces = async (selectId?: number) => {
         const data = await api.workspaces.getAll();
@@ -75,8 +70,8 @@ export function DashboardPage() {
     const selectWorkspace = (ws: Workspace) => {
         setSelectedWorkspace(ws);
         setTab("boards");
-        setAddMemberEmail("");
-        setAddMemberError("");
+        setAddEmail("");
+        setAddMsg("");
     };
 
     const createWorkspace = async () => {
@@ -99,21 +94,39 @@ export function DashboardPage() {
         setCreating(false);
     };
 
-    const handleAddMember = async () => {
-        if (!addMemberEmail.trim() || !selectedWorkspace) return;
-        setAddMemberLoading(true);
-        setAddMemberError("");
+    const handleAdd = async () => {
+        if (!addEmail.trim() || !selectedWorkspace) return;
+        setAddLoading(true);
+        setAddMsg("");
         try {
+            // Try direct add first
             await api.workspaces.addMember(selectedWorkspace.id, {
-                email: addMemberEmail.trim(),
-                role: addMemberRole,
+                email: addEmail.trim(),
+                role: addRole,
             });
-            setAddMemberEmail("");
+            setAddMsg("Member added!");
+            setAddMsgType("success");
+            setAddEmail("");
             await refreshWorkspaces();
         } catch (e: any) {
-            setAddMemberError(e.message || "Failed to add member");
+            // If user not on Taskloom, send invite instead
+            if (e.message === "User not found") {
+                try {
+                    await api.invites.send(selectedWorkspace.id, { email: addEmail.trim(), role: addRole });
+                    setAddMsg(`Invite sent to ${addEmail.trim()}`);
+                    setAddMsgType("success");
+                    setAddEmail("");
+                } catch (ie: any) {
+                    setAddMsg(ie.message || "Failed to send invite");
+                    setAddMsgType("error");
+                }
+            } else {
+                setAddMsg(e.message || "Failed to add member");
+                setAddMsgType("error");
+            }
         } finally {
-            setAddMemberLoading(false);
+            setAddLoading(false);
+            setTimeout(() => setAddMsg(""), 4000);
         }
     };
 
@@ -170,21 +183,8 @@ export function DashboardPage() {
         }
     };
 
-    const handleSendInvite = async () => {
-        if (!inviteEmail.trim() || !selectedWorkspace) return;
-        setInviteLoading(true);
-        setInviteMsg("");
-        try {
-            await api.invites.send(selectedWorkspace.id, { email: inviteEmail.trim(), role: inviteRole });
-            setInviteMsg("Invite sent! They'll receive an email.");
-            setInviteEmail("");
-            setTimeout(() => setInviteMsg(""), 4000);
-        } catch (e: any) {
-            setInviteMsg(e.message || "Failed to send invite");
-        } finally {
-            setInviteLoading(false);
-        }
-    };
+
+
 
     const handleLogout = async () => {
         await logout();
@@ -470,37 +470,42 @@ export function DashboardPage() {
                         {/* Members tab */}
                         {tab === "members" && (
                             <div className="max-w-2xl">
-                                {/* Add member form — only admins */}
+                                {/* Unified add / invite — only admins see this */}
                                 {isCurrentUserAdmin && (
                                     <div className="bg-surface border border-border rounded-xl p-4 mb-6">
-                                        <p className="text-white text-sm font-medium mb-3">Add member</p>
+                                        <p className="text-white text-sm font-medium mb-0.5">Add member</p>
+                                        <p className="text-slate-500 text-xs mb-3">
+                                            Enter their email. If they're on Taskloom they'll be added instantly — otherwise they'll get an invite link.
+                                        </p>
                                         <div className="flex gap-2">
                                             <input
                                                 type="email"
                                                 placeholder="Email address"
-                                                value={addMemberEmail}
-                                                onChange={(e) => { setAddMemberEmail(e.target.value); setAddMemberError(""); }}
-                                                onKeyDown={(e) => e.key === "Enter" && handleAddMember()}
+                                                value={addEmail}
+                                                onChange={(e) => { setAddEmail(e.target.value); setAddMsg(""); }}
+                                                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
                                                 className="flex-1 bg-elevated border border-border rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 outline-none focus:border-accent/50 transition-colors"
                                             />
                                             <select
-                                                value={addMemberRole}
-                                                onChange={(e) => setAddMemberRole(e.target.value)}
+                                                value={addRole}
+                                                onChange={(e) => setAddRole(e.target.value)}
                                                 className="bg-elevated border border-border rounded-lg px-3 py-2 text-white text-sm outline-none"
                                             >
                                                 <option value="EMPLOYEE">Employee</option>
                                                 <option value="ADMIN">Admin</option>
                                             </select>
                                             <button
-                                                onClick={handleAddMember}
-                                                disabled={addMemberLoading || !addMemberEmail.trim()}
+                                                onClick={handleAdd}
+                                                disabled={addLoading || !addEmail.trim()}
                                                 className="bg-accent hover:bg-accent-hover disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                                             >
-                                                {addMemberLoading ? "Adding..." : "Add"}
+                                                {addLoading ? "..." : "Add"}
                                             </button>
                                         </div>
-                                        {addMemberError && (
-                                            <p className="text-red-400 text-xs mt-2">{addMemberError}</p>
+                                        {addMsg && (
+                                            <p className={`text-xs mt-2 ${addMsgType === "success" ? "text-green-400" : "text-red-400"}`}>
+                                                {addMsg}
+                                            </p>
                                         )}
                                     </div>
                                 )}
@@ -564,44 +569,6 @@ export function DashboardPage() {
                                         </div>
                                     ))}
                                 </div>
-
-                                {/* Invite new user via email */}
-                                {isCurrentUserAdmin && (
-                                    <div className="bg-surface border border-border rounded-xl p-4 mt-6">
-                                        <p className="text-white text-sm font-medium mb-1">Invite someone new</p>
-                                        <p className="text-slate-500 text-xs mb-3">They'll get an email link to join. Works even if they don't have a Taskloom account yet.</p>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="email"
-                                                placeholder="Email address"
-                                                value={inviteEmail}
-                                                onChange={(e) => { setInviteEmail(e.target.value); setInviteMsg(""); }}
-                                                onKeyDown={(e) => e.key === "Enter" && handleSendInvite()}
-                                                className="flex-1 bg-elevated border border-border rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 outline-none focus:border-accent/50 transition-colors"
-                                            />
-                                            <select
-                                                value={inviteRole}
-                                                onChange={(e) => setInviteRole(e.target.value)}
-                                                className="bg-elevated border border-border rounded-lg px-3 py-2 text-white text-sm outline-none"
-                                            >
-                                                <option value="EMPLOYEE">Employee</option>
-                                                <option value="ADMIN">Admin</option>
-                                            </select>
-                                            <button
-                                                onClick={handleSendInvite}
-                                                disabled={inviteLoading || !inviteEmail.trim()}
-                                                className="bg-accent hover:bg-accent-hover disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                                            >
-                                                {inviteLoading ? "Sending..." : "Send invite"}
-                                            </button>
-                                        </div>
-                                        {inviteMsg && (
-                                            <p className={`text-xs mt-2 ${inviteMsg.startsWith("Invite sent") ? "text-green-400" : "text-red-400"}`}>
-                                                {inviteMsg}
-                                            </p>
-                                        )}
-                                    </div>
-                                )}
                             </div>
                         )}
                     </div>
