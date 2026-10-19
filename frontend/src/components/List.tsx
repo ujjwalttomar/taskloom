@@ -23,28 +23,33 @@ function SortableCard({ card, onClick }: { card: CardType; onClick: () => void }
         <div
             ref={setNodeRef}
             style={style}
-            {...attributes}
-            {...listeners}
-            onClick={onClick}
             className="bg-elevated border border-border hover:border-accent/30 rounded-xl px-3 py-2.5 cursor-pointer group transition-colors"
         >
-            <p className="text-white text-sm leading-snug">{card.title}</p>
-            {card.description && (
-                <p className="text-slate-500 text-xs mt-1 line-clamp-2">{card.description}</p>
-            )}
-            {(card.assignedTo?.length ?? 0) > 0 && (
-                <div className="flex items-center gap-1 mt-2">
-                    {card.assignedTo!.slice(0, 3).map((a) => (
-                        <div
-                            key={a.userId}
-                            className="w-5 h-5 rounded-full bg-accent/30 flex items-center justify-center text-[9px] text-accent font-bold"
-                            title={a.user?.name}
-                        >
-                            {a.user?.name?.[0]?.toUpperCase() ?? "?"}
-                        </div>
-                    ))}
-                </div>
-            )}
+            {/* Drag handle area covers the card but click still works */}
+            <div
+                {...attributes}
+                {...listeners}
+                className="flex flex-col gap-1"
+                onClick={onClick}
+            >
+                <p className="text-white text-sm leading-snug">{card.title}</p>
+                {card.description && (
+                    <p className="text-slate-500 text-xs mt-1 line-clamp-2">{card.description}</p>
+                )}
+                {(card.assignedTo?.length ?? 0) > 0 && (
+                    <div className="flex items-center gap-1 mt-2">
+                        {card.assignedTo!.slice(0, 3).map((a) => (
+                            <div
+                                key={a.userId}
+                                className="w-5 h-5 rounded-full bg-accent/30 flex items-center justify-center text-[9px] text-accent font-bold"
+                                title={a.user?.name}
+                            >
+                                {a.user?.name?.[0]?.toUpperCase() ?? "?"}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
@@ -69,11 +74,11 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
     const [submitting, setSubmitting] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
 
-    // Make the whole list column sortable (for horizontal list reorder)
+    // Sortable — only the drag handle gets listeners, outer div gets setNodeRef + transform
     const {
         attributes,
         listeners,
-        setNodeRef: setSortableRef,
+        setNodeRef,
         transform,
         transition,
     } = useSortable({
@@ -81,10 +86,10 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
         data: { type: "list", list },
     });
 
-    // Make the cards area droppable (so cards can be dropped into this list)
+    // Make the cards container droppable so cards can be dropped into this list
     const { setNodeRef: setDropRef } = useDroppable({
-        id: list.id,
-        data: { type: "list" },
+        id: `droppable-list-${list.id}`,
+        data: { type: "list", listId: list.id },
     });
 
     const style = {
@@ -126,16 +131,31 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
 
     return (
         <div
-            ref={setSortableRef}
+            ref={setNodeRef}
             style={style}
             className="flex flex-col w-72 shrink-0 bg-surface border border-border rounded-2xl max-h-full"
         >
-            {/* List header — drag handle only on the header */}
+            {/* List header — only this div is the drag handle */}
             <div
-                className="flex items-center justify-between px-4 pt-4 pb-2 cursor-grab active:cursor-grabbing"
-                {...attributes}
-                {...listeners}
+                className="flex items-center justify-between px-4 pt-4 pb-2"
             >
+                {/* Drag grip — separate element so title click doesn't drag */}
+                <div
+                    {...attributes}
+                    {...listeners}
+                    className="mr-2 text-slate-600 hover:text-slate-400 cursor-grab active:cursor-grabbing shrink-0"
+                    title="Drag to reorder"
+                >
+                    <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+                        <circle cx="5" cy="4" r="1.5" />
+                        <circle cx="11" cy="4" r="1.5" />
+                        <circle cx="5" cy="8" r="1.5" />
+                        <circle cx="11" cy="8" r="1.5" />
+                        <circle cx="5" cy="12" r="1.5" />
+                        <circle cx="11" cy="12" r="1.5" />
+                    </svg>
+                </div>
+
                 {editingTitle ? (
                     <input
                         autoFocus
@@ -153,16 +173,16 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
                 ) : (
                     <button
                         onClick={() => setEditingTitle(true)}
-                        onPointerDown={(e) => e.stopPropagation()}
                         className="flex-1 text-left text-white font-semibold text-sm hover:text-slate-300 transition-colors"
                     >
                         {list.title}
                     </button>
                 )}
 
-                <div className="relative ml-2" onPointerDown={(e) => e.stopPropagation()}>
+                <div className="relative ml-2">
                     <button
                         onClick={() => setMenuOpen(!menuOpen)}
+                        onPointerDown={(e) => e.stopPropagation()}
                         className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-white hover:bg-elevated rounded-lg transition-colors"
                     >
                         <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">

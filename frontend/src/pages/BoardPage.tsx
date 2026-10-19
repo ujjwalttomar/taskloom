@@ -6,10 +6,12 @@ import {
     PointerSensor,
     useSensor,
     useSensors,
-    closestCorners,
+    pointerWithin,
+    rectIntersection,
     type DragStartEvent,
     type DragOverEvent,
     type DragEndEvent,
+    type CollisionDetection,
 } from "@dnd-kit/core";
 import {
     SortableContext,
@@ -21,6 +23,15 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import { List } from "../components/List";
 import { CardModal } from "../components/CardModal";
 import type { Board, List as ListType, Card, WsEvent } from "../types";
+
+// Custom collision detection: prefer pointerWithin, fall back to rectIntersection
+const collisionDetection: CollisionDetection = (args) => {
+    // First try pointer-based (most accurate for the pointer position)
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) return pointerCollisions;
+    // Fall back to rect intersection
+    return rectIntersection(args);
+};
 
 export function BoardPage() {
     const { boardId: boardIdParam } = useParams<{ boardId: string }>();
@@ -53,8 +64,11 @@ export function BoardPage() {
     const [boardTitleValue, setBoardTitleValue] = useState("");
     const [showBoardMenu, setShowBoardMenu] = useState(false);
 
+    // Snapshot of lists at drag start — used to revert on failure
+    const [listsSnapshot, setListsSnapshot] = useState<ListType[]>([]);
+
     const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+        useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
     );
 
     useEffect(() => {
@@ -124,36 +138,60 @@ export function BoardPage() {
 
     useWebSocket(boardId, handleWsEvent);
 
-    // ─── DnD Handlers ─────────────────────────────────────────────────────────
+    // ─── Helpers ────────────────────────────────────────────────────────────────
 
     const findListByCardId = (cardId: number) =>
         lists.find((l) => l.cards.some((c) => c.id === cardId));
 
+    // Given an over.id, figure out which list it belongs to
+    // over.id could be: a list id, a "droppable-list-{id}", or a card id
+    const resolveTargetList = (overId: string | number, overData: Record<string, any> | null): ListType | undefined => {
+        // Droppable list container
+        if (overData?.type === "list") {
+            const listId = overData.listId ?? overId;
+            return lists.find((l) => l.id === listId);
+        }
+        // Card — find its parent list
+        if (overData?.type === "card") {
+            return findListByCardId(overId as number);
+        }
+        // Fallback: maybe overId is a list id directly
+        return lists.find((l) => l.id === overId);
+    };
+
+    // ─── DnD Handlers ───────────────────────────────────────────────────────────
+
     const handleDragStart = (event: DragStartEvent) => {
         const { id, data } = event.active;
+        setListsSnapshot(lists); // snapshot for revert
         if (data.current?.type === "list") setActiveListId(id as number);
         if (data.current?.type === "card") setActiveCardId(id as number);
     };
 
-    // onDragOver: optimistic UI for card moving between lists
+    // onDragOver: optimistic move of card between lists while dragging
     const handleDragOver = (event: DragOverEvent) => {
         const { active, over } = event;
         if (!over || active.id === over.id) return;
         if (active.data.current?.type !== "card") return;
 
-        const activeCardId = active.id as number;
-        const overList = over.data.current?.type === "list"
-            ? lists.find((l) => l.id === (over.id as number))
-            : findListByCardId(over.id as number);
+        const activeCardIdNum = active.id as number;
+        const overList = resolveTargetList(over.id, over.data.current as any);
+        const sourceList = findListByCardId(activeCardIdNum);
 
-        const sourceList = findListByCardId(activeCardId);
         if (!sourceList || !overList || sourceList.id === overList.id) return;
 
-        // Move card between lists optimistically
-        const card = sourceList.cards.find((c) => c.id === activeCardId)!;
+        // Move card optimistically to the target list
+        const card = sourceList.cards.find((c) => c.id === activeCardIdNum)!;
         setLists((prev) => prev.map((l) => {
-            if (l.id === sourceList.id) return { ...l, cards: l.cards.filter((c) => c.id !== activeCardId) };
-            if (l.id === overList.id) return { ...l, cards: [...l.cards, { ...card, listId: overList.id }] };
+            if (l.id === sourceList.id) return { ...l, cards: l.cards.filter((c) => c.id !== activeCardIdNum) };
+            if (l.id === overList.id) {
+                // Insert card at correct position
+                const overCardIdx = l.cards.findIndex((c) => c.id === over.id);
+                const newCards = [...l.cards];
+                const insertIdx = overCardIdx >= 0 ? overCardIdx : newCards.length;
+                newCards.splice(insertIdx, 0, { ...card, listId: overList.id });
+                return { ...l, cards: newCards };
+            }
             return l;
         }));
     };
@@ -162,16 +200,28 @@ export function BoardPage() {
         const { active, over } = event;
         setActiveListId(null);
         setActiveCardId(null);
-        if (!over) return;
+        if (!over) {
+            // Dropped outside — revert to snapshot
+            setLists(listsSnapshot);
+            return;
+        }
 
-        // ── List reorder ───────────────────────────────────
-        if (active.data.current?.type === "list" && active.id !== over.id) {
+        // ── List reorder ────────────────────────────────────────────────────────
+        if (active.data.current?.type === "list") {
+            if (active.id === over.id) return;
+            // over might be a list or a droppable-list-* id; normalise to list id
+            const overListId = (over.data.current?.type === "list" && over.data.current?.listId)
+                ? over.data.current.listId
+                : over.id;
+
             const oldIndex = lists.findIndex((l) => l.id === active.id);
-            const newIndex = lists.findIndex((l) => l.id === over.id);
+            const newIndex = lists.findIndex((l) => l.id === overListId);
+            if (oldIndex === -1 || newIndex === -1) return;
+
             const reordered = arrayMove(lists, oldIndex, newIndex);
             setLists(reordered);
 
-            const movedList = reordered[newIndex];
+            const movedList = reordered[newIndex]!;
             const afterList = newIndex > 0 ? reordered[newIndex - 1] : undefined;
             const beforeList = newIndex < reordered.length - 1 ? reordered[newIndex + 1] : undefined;
 
@@ -181,53 +231,58 @@ export function BoardPage() {
                     beforeListId: beforeList?.id,
                 });
             } catch {
-                // revert on failure
-                setLists(lists);
+                setLists(listsSnapshot);
             }
             return;
         }
 
-        // ── Card reorder / move ────────────────────────────
+        // ── Card move / reorder ─────────────────────────────────────────────────
         if (active.data.current?.type === "card") {
             const cardId = active.id as number;
-            const sourceList = lists.find((l) => l.cards.some((c) => c.id === cardId));
-            if (!sourceList) return;
 
-            // Figure out target list
-            let targetList: ListType | undefined;
+            // Find where the card currently is (after optimistic moves in handleDragOver)
+            const currentList = lists.find((l) => l.cards.some((c) => c.id === cardId));
+            if (!currentList) {
+                setLists(listsSnapshot);
+                return;
+            }
+
+            // Determine target list and neighbouring cards
+            const overList = resolveTargetList(over.id, over.data.current as any);
+            if (!overList) {
+                setLists(listsSnapshot);
+                return;
+            }
+
             let afterCardId: number | undefined;
             let beforeCardId: number | undefined;
 
-            if (over.data.current?.type === "list") {
-                // Dropped directly on a list (empty or end)
-                targetList = lists.find((l) => l.id === (over.id as number));
-            } else if (over.data.current?.type === "card") {
-                // Dropped on another card
-                targetList = lists.find((l) => l.cards.some((c) => c.id === over.id));
-                if (targetList) {
-                    const overIdx = targetList.cards.findIndex((c) => c.id === over.id);
-                    afterCardId = overIdx > 0 ? targetList.cards[overIdx - 1].id : undefined;
-                    beforeCardId = targetList.cards[overIdx].id;
+            if (over.data.current?.type === "card" && over.id !== cardId) {
+                const overCardIdx = overList.cards.findIndex((c) => c.id === over.id);
+                if (overCardIdx >= 0) {
+                    // Insert before this card
+                    beforeCardId = over.id as number;
+                    afterCardId = overCardIdx > 0 ? overList.cards[overCardIdx - 1]!.id : undefined;
                 }
+            } else {
+                // Dropped on list itself — append at end
+                const cards = overList.cards.filter((c) => c.id !== cardId);
+                afterCardId = cards.length > 0 ? cards[cards.length - 1]!.id : undefined;
             }
-
-            if (!targetList) return;
 
             try {
                 await api.cards.move(cardId, {
-                    targetListId: targetList.id,
+                    targetListId: overList.id,
                     afterCardId,
                     beforeCardId,
                 });
             } catch {
-                // reload board on failure
-                const data = await api.boards.getOne(boardId);
-                setLists(data.board.lists ?? []);
+                setLists(listsSnapshot);
             }
         }
     };
 
-    // ─── Other handlers ───────────────────────────────────────────────────────
+    // ─── Other handlers ─────────────────────────────────────────────────────────
 
     const handleAddList = async () => {
         if (!newListTitle.trim()) return;
@@ -431,7 +486,7 @@ export function BoardPage() {
                         )}
                     </div>
 
-                    {/* Members button */}
+                    {/* Members panel */}
                     <div className="relative">
                         <button
                             onClick={() => { setShowMembers(!showMembers); setAddMemberError(""); }}
@@ -512,7 +567,7 @@ export function BoardPage() {
 
                                 {/* Add member form */}
                                 <div className="px-4 py-3 border-t border-border">
-                                    <p className="text-slate-400 text-xs mb-2">Add workspace member</p>
+                                    <p className="text-slate-400 text-xs mb-2">Add workspace member to board</p>
                                     <div className="flex gap-1.5 mb-1.5">
                                         <input
                                             type="email"
@@ -548,16 +603,17 @@ export function BoardPage() {
                 </div>
             </header>
 
-            {/* Board canvas */}
-            <div className="flex-1 overflow-hidden">
+            {/* Board canvas — horizontal scroll here, NOT on the DndContext wrapper */}
+            <div className="flex-1 overflow-x-auto overflow-y-hidden">
                 <DndContext
                     sensors={sensors}
-                    collisionDetection={closestCorners}
+                    collisionDetection={collisionDetection}
                     onDragStart={handleDragStart}
                     onDragOver={handleDragOver}
                     onDragEnd={handleDragEnd}
                 >
-                    <div className="board-scroll h-full pt-5">
+                    {/* Inner row — inline-flex so it sizes to content and lets the outer div scroll */}
+                    <div className="inline-flex gap-4 h-full pt-5 px-5 pb-5 items-start">
                         <SortableContext
                             items={lists.map((l) => l.id)}
                             strategy={horizontalListSortingStrategy}
@@ -622,7 +678,7 @@ export function BoardPage() {
                         </div>
                     </div>
 
-                    {/* Drag overlay — shows ghost while dragging */}
+                    {/* Drag overlay — ghost while dragging */}
                     <DragOverlay>
                         {activeList && (
                             <div className="flex flex-col w-72 bg-surface border border-accent/30 rounded-2xl opacity-90 rotate-2 shadow-2xl">
