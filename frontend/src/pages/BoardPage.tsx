@@ -48,6 +48,11 @@ export function BoardPage() {
     const [addMemberError, setAddMemberError] = useState("");
     const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
 
+    // Board edit/delete
+    const [editingBoardTitle, setEditingBoardTitle] = useState(false);
+    const [boardTitleValue, setBoardTitleValue] = useState("");
+    const [showBoardMenu, setShowBoardMenu] = useState(false);
+
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
     );
@@ -291,6 +296,28 @@ export function BoardPage() {
         }
     };
 
+    const handleSaveBoardTitle = async () => {
+        if (!boardTitleValue.trim() || !board) { setEditingBoardTitle(false); return; }
+        try {
+            const data = await api.boards.update(boardId, { title: boardTitleValue.trim() });
+            setBoard((prev) => prev ? { ...prev, title: data.board.title } : prev);
+        } catch (e: any) {
+            alert(e.message || "Failed to update board");
+        } finally {
+            setEditingBoardTitle(false);
+        }
+    };
+
+    const handleDeleteBoard = async () => {
+        if (!confirm(`Delete board "${board?.title}"? All lists and cards will be lost.`)) return;
+        try {
+            await api.boards.delete(boardId);
+            navigate("/dashboard");
+        } catch (e: any) {
+            alert(e.message || "Failed to delete board");
+        }
+    };
+
     // DragOverlay content
     const activeList = activeListId ? lists.find((l) => l.id === activeListId) : null;
     const activeCard = activeCardId
@@ -321,13 +348,61 @@ export function BoardPage() {
                 <div className="w-px h-5 bg-border" />
 
                 <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-accent rounded-md flex items-center justify-center">
+                    <div className="w-6 h-6 bg-accent rounded-md flex items-center justify-center shrink-0">
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                             <rect x="1" y="1" width="6" height="9" rx="1.5" fill="white" />
                             <rect x="9" y="1" width="6" height="6" rx="1.5" fill="white" />
                         </svg>
                     </div>
-                    <h1 className="text-white font-semibold text-sm">{board?.title}</h1>
+                    {editingBoardTitle ? (
+                        <input
+                            autoFocus
+                            value={boardTitleValue}
+                            onChange={(e) => setBoardTitleValue(e.target.value)}
+                            onBlur={handleSaveBoardTitle}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveBoardTitle();
+                                if (e.key === "Escape") setEditingBoardTitle(false);
+                            }}
+                            className="bg-elevated border border-accent/50 rounded-lg px-2 py-1 text-white text-sm font-semibold outline-none w-48"
+                        />
+                    ) : (
+                        <h1 className="text-white font-semibold text-sm">{board?.title}</h1>
+                    )}
+
+                    {/* Board 3-dot menu */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowBoardMenu(!showBoardMenu)}
+                            className="text-slate-600 hover:text-white transition-colors p-1 rounded"
+                        >
+                            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                                <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+                            </svg>
+                        </button>
+                        {showBoardMenu && (
+                            <div className="absolute left-0 top-8 bg-elevated border border-border rounded-xl shadow-2xl z-20 w-40 py-1">
+                                <button
+                                    onClick={() => { setBoardTitleValue(board?.title ?? ""); setEditingBoardTitle(true); setShowBoardMenu(false); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-bg/50 transition-colors flex items-center gap-2"
+                                >
+                                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                    </svg>
+                                    Rename
+                                </button>
+                                <button
+                                    onClick={() => { setShowBoardMenu(false); handleDeleteBoard(); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-bg/50 transition-colors flex items-center gap-2"
+                                >
+                                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                        <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                    </svg>
+                                    Delete board
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="ml-auto flex items-center gap-3">
@@ -399,6 +474,24 @@ export function BoardPage() {
                                             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${m.role === "ADMIN" ? "bg-accent/20 text-accent" : "bg-bg text-slate-400"}`}>
                                                 {m.role === "ADMIN" ? "Admin" : "Employee"}
                                             </span>
+                                            <button
+                                                onClick={async () => {
+                                                    const newRole = m.role === "ADMIN" ? "EMPLOYEE" : "ADMIN";
+                                                    try {
+                                                        await api.boards.updateMemberRole(boardId, m.memberId, newRole);
+                                                        setBoard((prev) => prev ? {
+                                                            ...prev,
+                                                            members: (prev.members ?? []).map((bm) =>
+                                                                bm.memberId === m.memberId ? { ...bm, role: newRole as "ADMIN" | "EMPLOYEE" } : bm
+                                                            ),
+                                                        } : prev);
+                                                    } catch (e: any) { alert(e.message || "Failed"); }
+                                                }}
+                                                className="text-slate-600 hover:text-slate-300 text-xs transition-colors px-1 rounded"
+                                                title={m.role === "ADMIN" ? "Demote" : "Promote"}
+                                            >
+                                                {m.role === "ADMIN" ? "↓" : "↑"}
+                                            </button>
                                             <button
                                                 onClick={() => handleRemoveMember(m.memberId)}
                                                 disabled={removingMemberId === m.memberId}

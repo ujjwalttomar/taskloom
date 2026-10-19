@@ -22,6 +22,12 @@ export function DashboardPage() {
     const [boardTitle, setBoardTitle] = useState("");
     const [creating, setCreating] = useState(false);
 
+    // Edit workspace
+    const [editingWsName, setEditingWsName] = useState(false);
+    const [editWsNameValue, setEditWsNameValue] = useState("");
+    const [savingWsName, setSavingWsName] = useState(false);
+    const [deletingWs, setDeletingWs] = useState(false);
+
     // Add member state
     const [addMemberEmail, setAddMemberEmail] = useState("");
     const [addMemberRole, setAddMemberRole] = useState("EMPLOYEE");
@@ -115,6 +121,46 @@ export function DashboardPage() {
             alert(e.message || "Failed to remove member");
         } finally {
             setRemovingMemberId(null);
+        }
+    };
+
+    const handleSaveWsName = async () => {
+        if (!selectedWorkspace || !editWsNameValue.trim()) { setEditingWsName(false); return; }
+        setSavingWsName(true);
+        try {
+            await api.workspaces.update(selectedWorkspace.id, { name: editWsNameValue.trim() });
+            await refreshWorkspaces();
+        } catch (e: any) {
+            alert(e.message || "Failed to update workspace");
+        } finally {
+            setSavingWsName(false);
+            setEditingWsName(false);
+        }
+    };
+
+    const handleDeleteWorkspace = async () => {
+        if (!selectedWorkspace) return;
+        if (!confirm(`Delete workspace "${selectedWorkspace.name}"? This will delete all boards and cards inside it.`)) return;
+        setDeletingWs(true);
+        try {
+            await api.workspaces.delete(selectedWorkspace.id);
+            await refreshWorkspaces();
+            setTab("boards");
+        } catch (e: any) {
+            alert(e.message || "Failed to delete workspace");
+        } finally {
+            setDeletingWs(false);
+        }
+    };
+
+    const handleChangeMemberRole = async (memberId: number, currentRole: string) => {
+        if (!selectedWorkspace) return;
+        const newRole = currentRole === "ADMIN" ? "EMPLOYEE" : "ADMIN";
+        try {
+            await api.workspaces.updateMemberRole(selectedWorkspace.id, memberId, newRole);
+            await refreshWorkspaces();
+        } catch (e: any) {
+            alert(e.message || "Failed to change role");
         }
     };
 
@@ -241,23 +287,71 @@ export function DashboardPage() {
                     <div className="p-8">
                         {/* Header */}
                         <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h1 className="text-2xl font-bold text-white">{selectedWorkspace.name}</h1>
+                            <div className="flex-1 min-w-0 mr-4">
+                                {editingWsName ? (
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            autoFocus
+                                            value={editWsNameValue}
+                                            onChange={(e) => setEditWsNameValue(e.target.value)}
+                                            onBlur={handleSaveWsName}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") handleSaveWsName();
+                                                if (e.key === "Escape") { setEditingWsName(false); }
+                                            }}
+                                            className="text-2xl font-bold bg-elevated border border-accent/50 rounded-xl px-3 py-1 text-white outline-none"
+                                        />
+                                        <button onClick={handleSaveWsName} disabled={savingWsName} className="text-accent text-sm">
+                                            {savingWsName ? "Saving..." : "Save"}
+                                        </button>
+                                        <button onClick={() => setEditingWsName(false)} className="text-slate-500 text-sm">Cancel</button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2 group">
+                                        <h1 className="text-2xl font-bold text-white truncate">{selectedWorkspace.name}</h1>
+                                        {isCurrentUserAdmin && (
+                                            <button
+                                                onClick={() => { setEditWsNameValue(selectedWorkspace.name); setEditingWsName(true); }}
+                                                className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-white transition-all p-1 rounded"
+                                                title="Rename workspace"
+                                            >
+                                                <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                                 <p className="text-slate-500 text-sm mt-0.5">
                                     {members.length} member{members.length !== 1 ? "s" : ""}
                                 </p>
                             </div>
-                            {tab === "boards" && (
-                                <button
-                                    onClick={() => setShowCreateBoard(true)}
-                                    className="flex items-center gap-2 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                                >
-                                    <svg width="14" height="14" fill="none" viewBox="0 0 12 12">
-                                        <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                                    </svg>
-                                    New Board
-                                </button>
-                            )}
+                            <div className="flex items-center gap-2 shrink-0">
+                                {isCurrentUserAdmin && (
+                                    <button
+                                        onClick={handleDeleteWorkspace}
+                                        disabled={deletingWs}
+                                        className="flex items-center gap-1.5 px-3 py-2 text-slate-500 hover:text-red-400 hover:bg-elevated border border-transparent hover:border-red-400/20 rounded-lg text-xs transition-colors disabled:opacity-50"
+                                        title="Delete workspace"
+                                    >
+                                        <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                            <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                        {deletingWs ? "Deleting..." : "Delete"}
+                                    </button>
+                                )}
+                                {tab === "boards" && (
+                                    <button
+                                        onClick={() => setShowCreateBoard(true)}
+                                        className="flex items-center gap-2 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                                    >
+                                        <svg width="14" height="14" fill="none" viewBox="0 0 12 12">
+                                            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                        </svg>
+                                        New Board
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         {/* Tabs */}
@@ -420,6 +514,15 @@ export function DashboardPage() {
                                             >
                                                 {m.role === "ADMIN" ? "Admin" : "Employee"}
                                             </span>
+                                            {isCurrentUserAdmin && m.memberId !== user?.id && (
+                                                <button
+                                                    onClick={() => handleChangeMemberRole(m.memberId, m.role)}
+                                                    className="text-slate-600 hover:text-slate-300 text-xs transition-colors px-1.5 py-0.5 rounded border border-transparent hover:border-border"
+                                                    title={m.role === "ADMIN" ? "Demote to Employee" : "Promote to Admin"}
+                                                >
+                                                    {m.role === "ADMIN" ? "↓" : "↑"}
+                                                </button>
+                                            )}
                                             {isCurrentUserAdmin && m.memberId !== user?.id && (
                                                 <button
                                                     onClick={() => handleRemoveMember(m.memberId)}

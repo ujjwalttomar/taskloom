@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
-import type { Card, Comment } from "../types";
+import type { Card, Comment, BoardMember } from "../types";
 
 interface CardModalProps {
     cardId: number;
@@ -11,9 +11,10 @@ interface CardModalProps {
     onCardDeleted: (cardId: number) => void;
 }
 
-export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted }: CardModalProps) {
+export function CardModal({ cardId, boardId, onClose, onCardUpdated, onCardDeleted }: CardModalProps) {
     const { user } = useAuth();
     const [card, setCard] = useState<Card | null>(null);
+    const [boardMembers, setBoardMembers] = useState<BoardMember[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [editingTitle, setEditingTitle] = useState(false);
@@ -26,14 +27,20 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted }: Car
     const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
     const [editCommentText, setEditCommentText] = useState("");
 
+    const [assignLoading, setAssignLoading] = useState<number | null>(null);
+
     useEffect(() => {
-        api.cards.getOne(cardId).then((data) => {
-            setCard(data.card);
-            setTitleValue(data.card.title);
-            setDescValue(data.card.description || "");
+        Promise.all([
+            api.cards.getOne(cardId),
+            api.boards.getOne(boardId),
+        ]).then(([cardData, boardData]) => {
+            setCard(cardData.card);
+            setTitleValue(cardData.card.title);
+            setDescValue(cardData.card.description || "");
+            setBoardMembers(boardData.board.members ?? []);
             setLoading(false);
         });
-    }, [cardId]);
+    }, [cardId, boardId]);
 
     const handleSaveTitle = async () => {
         if (!card || !titleValue.trim() || titleValue === card.title) {
@@ -89,6 +96,31 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted }: Car
         await api.cards.delete(cardId);
         onCardDeleted(cardId);
         onClose();
+    };
+
+    const handleToggleAssign = async (memberId: number) => {
+        if (!card) return;
+        const isAssigned = (card.assignedTo ?? []).some((a) => a.userId === memberId);
+        setAssignLoading(memberId);
+        try {
+            if (isAssigned) {
+                await api.cards.unassign(cardId, memberId);
+                setCard((prev) => prev ? {
+                    ...prev,
+                    assignedTo: prev.assignedTo?.filter((a) => a.userId !== memberId),
+                } : prev);
+            } else {
+                const data = await api.cards.assign(cardId, memberId);
+                setCard((prev) => prev ? {
+                    ...prev,
+                    assignedTo: [...(prev.assignedTo ?? []), data.assignment],
+                } : prev);
+            }
+        } catch (e: any) {
+            alert(e.message || "Failed");
+        } finally {
+            setAssignLoading(null);
+        }
     };
 
     const formatDate = (str: string) => new Date(str).toLocaleDateString("en-US", {
@@ -168,24 +200,48 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted }: Car
 
                         <div className="p-6 flex flex-col gap-6">
                             {/* Assignees */}
-                            {(card.assignedTo?.length ?? 0) > 0 && (
-                                <section>
-                                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Assignees</h3>
+                            <section>
+                                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Assignees</h3>
+                                {boardMembers.length === 0 ? (
+                                    <p className="text-slate-600 text-xs">No board members found</p>
+                                ) : (
                                     <div className="flex flex-wrap gap-2">
-                                        {card.assignedTo!.map((a) => (
-                                            <div key={a.userId} className="flex items-center gap-2 bg-elevated border border-border rounded-full px-3 py-1">
-                                                <div
-                                                    className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
-                                                    style={{ background: stringToColor(a.user?.name || String(a.userId)) }}
+                                        {boardMembers.map((m) => {
+                                            const isAssigned = (card.assignedTo ?? []).some((a) => a.userId === m.memberId);
+                                            const isLoading = assignLoading === m.memberId;
+                                            return (
+                                                <button
+                                                    key={m.memberId}
+                                                    onClick={() => handleToggleAssign(m.memberId)}
+                                                    disabled={isLoading}
+                                                    className={`flex items-center gap-2 border rounded-full px-3 py-1 text-xs transition-all ${
+                                                        isAssigned
+                                                            ? "bg-accent/20 border-accent text-white"
+                                                            : "bg-elevated border-border text-slate-400 hover:border-slate-500 hover:text-white"
+                                                    }`}
+                                                    title={isAssigned ? "Click to unassign" : "Click to assign"}
                                                 >
-                                                    {a.user?.name[0]?.toUpperCase() ?? "?"}
-                                                </div>
-                                                <span className="text-white text-xs">{a.user?.name ?? "Unknown"}</span>
-                                            </div>
-                                        ))}
+                                                    <div
+                                                        className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                                        style={{ background: stringToColor(m.user?.name || String(m.memberId)) }}
+                                                    >
+                                                        {m.user?.name[0]?.toUpperCase() ?? "?"}
+                                                    </div>
+                                                    {m.user?.name ?? `User #${m.memberId}`}
+                                                    {isAssigned && (
+                                                        <svg width="10" height="10" fill="none" viewBox="0 0 24 24">
+                                                            <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                        </svg>
+                                                    )}
+                                                    {isLoading && (
+                                                        <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
-                                </section>
-                            )}
+                                )}
+                            </section>
 
                             {/* Description */}
                             <section>

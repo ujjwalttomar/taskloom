@@ -42,6 +42,11 @@ export const api = {
         delete: (id: number) => request(`/api/workspaces/${id}`, { method: "DELETE" }),
         addMember: (id: number, data: { email: string; role?: string }) =>
             request(`/api/workspaces/${id}/members`, { method: "POST", body: JSON.stringify(data) }),
+        updateMemberRole: (id: number, memberId: number, role: string) =>
+            request(`/api/workspaces/${id}/members/${memberId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ role }),
+            }),
         removeMember: (id: number, memberId: number) =>
             request(`/api/workspaces/${id}/members/${memberId}`, { method: "DELETE" }),
     },
@@ -65,7 +70,15 @@ export const api = {
             }),
         delete: (boardId: number) => request(`/api/boards/${boardId}`, { method: "DELETE" }),
         addMember: (boardId: number, data: { email: string; role?: string }) =>
-            request(`/api/boards/${boardId}/members`, { method: "POST", body: JSON.stringify(data) }),
+            request<{ member: import("../types").BoardMember }>(`/api/boards/${boardId}/members`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            }),
+        updateMemberRole: (boardId: number, memberId: number, role: string) =>
+            request(`/api/boards/${boardId}/members/${memberId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ role }),
+            }),
         removeMember: (boardId: number, memberId: number) =>
             request(`/api/boards/${boardId}/members/${memberId}`, { method: "DELETE" }),
     },
@@ -115,9 +128,12 @@ export const api = {
                 body: JSON.stringify(data),
             }),
         assign: (cardId: number, userId: number) =>
-            request(`/api/cards/${cardId}/assignees`, { method: "POST", body: JSON.stringify({ userId }) }),
+            request<{ assignment: import("../types").AssignedCard }>(`/api/cards/${cardId}/assign`, {
+                method: "POST",
+                body: JSON.stringify({ userId }),
+            }),
         unassign: (cardId: number, userId: number) =>
-            request(`/api/cards/${cardId}/assignees/${userId}`, { method: "DELETE" }),
+            request(`/api/cards/${cardId}/assign/${userId}`, { method: "DELETE" }),
     },
 
     // ─── Comments ────────────────────────────────────────
