@@ -19,7 +19,7 @@ export interface WorkspaceMember {
     workspaceId: number;
     memberId: number;
     role: "ADMIN" | "EMPLOYEE";
-    member?: User;
+    user?: User;
 }
 
 export interface Board {

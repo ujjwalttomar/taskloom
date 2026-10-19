@@ -184,7 +184,7 @@ export function DashboardPage() {
                             <div>
                                 <h1 className="text-2xl font-bold text-white">{selectedWorkspace.name}</h1>
                                 <p className="text-slate-500 text-sm mt-0.5">
-                                    {selectedWorkspace.members.length} member{selectedWorkspace.members.length !== 1 ? "s" : ""}
+                                    {(selectedWorkspace.members ?? []).length} member{(selectedWorkspace.members ?? []).length !== 1 ? "s" : ""}
                                 </p>
                             </div>
                             <button
@@ -244,7 +244,7 @@ export function DashboardPage() {
                                             <p className="text-slate-500 text-xs line-clamp-2 mb-3">{board.description}</p>
                                         )}
                                         <div className="flex items-center gap-1.5">
-                                            {board.members.slice(0, 4).map((m) => (
+                                            {(board.members ?? []).slice(0, 4).map((m) => (
                                                 <div
                                                     key={m.memberId}
                                                     className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white"
@@ -254,8 +254,8 @@ export function DashboardPage() {
                                                     {m.user?.name[0]?.toUpperCase() || "?"}
                                                 </div>
                                             ))}
-                                            {board.members.length > 4 && (
-                                                <span className="text-slate-500 text-xs">+{board.members.length - 4}</span>
+                                            {(board.members ?? []).length > 4 && (
+                                                <span className="text-slate-500 text-xs">+{(board.members ?? []).length - 4}</span>
                                             )}
                                         </div>
                                     </button>
