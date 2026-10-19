@@ -40,12 +40,13 @@ export function BoardPage() {
     const [activeListId, setActiveListId] = useState<number | null>(null);
     const [activeCardId, setActiveCardId] = useState<number | null>(null);
 
-    // Invite modal
-    const [showInvite, setShowInvite] = useState(false);
-    const [inviteEmail, setInviteEmail] = useState("");
-    const [inviteRole, setInviteRole] = useState("EMPLOYEE");
-    const [inviteSending, setInviteSending] = useState(false);
-    const [inviteMsg, setInviteMsg] = useState("");
+    // Members panel
+    const [showMembers, setShowMembers] = useState(false);
+    const [addMemberEmail, setAddMemberEmail] = useState("");
+    const [addMemberRole, setAddMemberRole] = useState("EMPLOYEE");
+    const [addMemberLoading, setAddMemberLoading] = useState(false);
+    const [addMemberError, setAddMemberError] = useState("");
+    const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -257,19 +258,36 @@ export function BoardPage() {
     const handleListRenamed = (listId: number, title: string) =>
         setLists((prev) => prev.map((l) => l.id === listId ? { ...l, title } : l));
 
-    const handleSendInvite = async () => {
-        if (!inviteEmail.trim()) return;
-        setInviteSending(true);
-        setInviteMsg("");
+    const handleAddMember = async () => {
+        if (!addMemberEmail.trim()) return;
+        setAddMemberLoading(true);
+        setAddMemberError("");
         try {
-            await api.invites.send(board!.workspaceId, { email: inviteEmail.trim(), role: inviteRole });
-            setInviteMsg("Invite sent!");
-            setInviteEmail("");
-            setTimeout(() => { setInviteMsg(""); setShowInvite(false); }, 2000);
+            const data = await api.boards.addMember(boardId, {
+                email: addMemberEmail.trim(),
+                role: addMemberRole,
+            });
+            setBoard((prev) => prev ? { ...prev, members: [...(prev.members ?? []), data.member] } : prev);
+            setAddMemberEmail("");
         } catch (e: any) {
-            setInviteMsg(e.message || "Failed to send invite");
+            setAddMemberError(e.message || "Failed to add member");
         } finally {
-            setInviteSending(false);
+            setAddMemberLoading(false);
+        }
+    };
+
+    const handleRemoveMember = async (memberId: number) => {
+        setRemovingMemberId(memberId);
+        try {
+            await api.boards.removeMember(boardId, memberId);
+            setBoard((prev) => prev
+                ? { ...prev, members: (prev.members ?? []).filter((m) => m.memberId !== memberId) }
+                : prev
+            );
+        } catch (e: any) {
+            alert(e.message || "Failed to remove member");
+        } finally {
+            setRemovingMemberId(null);
         }
     };
 
@@ -315,7 +333,7 @@ export function BoardPage() {
                 <div className="ml-auto flex items-center gap-3">
                     {/* Members avatars */}
                     <div className="flex items-center">
-                        {board?.members.slice(0, 5).map((m, i) => (
+                        {(board?.members ?? []).slice(0, 5).map((m, i) => (
                             <div
                                 key={m.memberId}
                                 className="w-7 h-7 rounded-full border-2 border-bg flex items-center justify-center text-xs font-bold text-white"
@@ -338,55 +356,97 @@ export function BoardPage() {
                         )}
                     </div>
 
-                    {/* Invite button */}
+                    {/* Members button */}
                     <div className="relative">
                         <button
-                            onClick={() => setShowInvite(!showInvite)}
+                            onClick={() => { setShowMembers(!showMembers); setAddMemberError(""); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-elevated border border-border hover:border-accent/50 text-slate-300 hover:text-white rounded-lg text-xs transition-colors"
                         >
                             <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
-                                <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M20 8v6M23 11h-6M9 7a4 4 0 110 8 4 4 0 010-8z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75M9 7a4 4 0 110 8 4 4 0 010-8z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
-                            Invite
+                            Members
                         </button>
 
-                        {showInvite && (
-                            <div className="absolute right-0 top-10 bg-elevated border border-border rounded-xl shadow-2xl p-4 z-20 w-72">
-                                <p className="text-white text-xs font-semibold mb-3">Invite to workspace</p>
-                                <input
-                                    type="email"
-                                    placeholder="Email address"
-                                    value={inviteEmail}
-                                    onChange={(e) => setInviteEmail(e.target.value)}
-                                    className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-accent/50 transition-colors mb-2"
-                                    onKeyDown={(e) => e.key === "Enter" && handleSendInvite()}
-                                />
-                                <select
-                                    value={inviteRole}
-                                    onChange={(e) => setInviteRole(e.target.value)}
-                                    className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-white text-xs outline-none mb-3"
-                                >
-                                    <option value="EMPLOYEE">Employee</option>
-                                    <option value="ADMIN">Admin</option>
-                                </select>
-                                {inviteMsg && (
-                                    <p className={`text-xs mb-2 ${inviteMsg === "Invite sent!" ? "text-green-400" : "text-red-400"}`}>
-                                        {inviteMsg}
-                                    </p>
-                                )}
-                                <div className="flex gap-2">
+                        {showMembers && (
+                            <div className="absolute right-0 top-10 bg-elevated border border-border rounded-xl shadow-2xl z-20 w-80">
+                                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                                    <p className="text-white text-sm font-semibold">Board members</p>
                                     <button
-                                        onClick={handleSendInvite}
-                                        disabled={inviteSending || !inviteEmail.trim()}
-                                        className="flex-1 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                        onClick={() => setShowMembers(false)}
+                                        className="text-slate-500 hover:text-white transition-colors"
                                     >
-                                        {inviteSending ? "Sending..." : "Send invite"}
+                                        <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                        </svg>
                                     </button>
+                                </div>
+
+                                {/* Member list */}
+                                <div className="max-h-56 overflow-y-auto">
+                                    {(board?.members ?? []).map((m) => (
+                                        <div key={m.memberId} className="flex items-center gap-2 px-4 py-2.5 hover:bg-bg/50">
+                                            <div
+                                                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                                                style={{ background: stringToColor(m.user?.name || String(m.memberId)) }}
+                                            >
+                                                {m.user?.name[0]?.toUpperCase() ?? "?"}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-white text-xs font-medium truncate">{m.user?.name ?? `User #${m.memberId}`}</p>
+                                                <p className="text-slate-500 text-xs truncate">{m.user?.email}</p>
+                                            </div>
+                                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${m.role === "ADMIN" ? "bg-accent/20 text-accent" : "bg-bg text-slate-400"}`}>
+                                                {m.role === "ADMIN" ? "Admin" : "Employee"}
+                                            </span>
+                                            <button
+                                                onClick={() => handleRemoveMember(m.memberId)}
+                                                disabled={removingMemberId === m.memberId}
+                                                className="text-slate-600 hover:text-red-400 transition-colors disabled:opacity-50 p-1 rounded shrink-0"
+                                                title="Remove from board"
+                                            >
+                                                {removingMemberId === m.memberId ? (
+                                                    <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                                                ) : (
+                                                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                                    </svg>
+                                                )}
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Add member form */}
+                                <div className="px-4 py-3 border-t border-border">
+                                    <p className="text-slate-400 text-xs mb-2">Add workspace member</p>
+                                    <div className="flex gap-1.5 mb-1.5">
+                                        <input
+                                            type="email"
+                                            placeholder="Email"
+                                            value={addMemberEmail}
+                                            onChange={(e) => { setAddMemberEmail(e.target.value); setAddMemberError(""); }}
+                                            onKeyDown={(e) => e.key === "Enter" && handleAddMember()}
+                                            className="flex-1 bg-bg border border-border rounded-lg px-2.5 py-1.5 text-white text-xs placeholder-slate-500 outline-none focus:border-accent/50 transition-colors"
+                                        />
+                                        <select
+                                            value={addMemberRole}
+                                            onChange={(e) => setAddMemberRole(e.target.value)}
+                                            className="bg-bg border border-border rounded-lg px-2 py-1.5 text-white text-xs outline-none"
+                                        >
+                                            <option value="EMPLOYEE">Employee</option>
+                                            <option value="ADMIN">Admin</option>
+                                        </select>
+                                    </div>
+                                    {addMemberError && (
+                                        <p className="text-red-400 text-xs mb-1.5">{addMemberError}</p>
+                                    )}
                                     <button
-                                        onClick={() => { setShowInvite(false); setInviteEmail(""); setInviteMsg(""); }}
-                                        className="px-3 py-1.5 bg-border text-slate-400 hover:text-white rounded-lg text-xs transition-colors"
+                                        onClick={handleAddMember}
+                                        disabled={addMemberLoading || !addMemberEmail.trim()}
+                                        className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-white py-1.5 rounded-lg text-xs font-medium transition-colors"
                                     >
-                                        Cancel
+                                        {addMemberLoading ? "Adding..." : "Add to board"}
                                     </button>
                                 </div>
                             </div>

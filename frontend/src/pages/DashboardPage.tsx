@@ -13,13 +13,32 @@ export function DashboardPage() {
     const [boards, setBoards] = useState<Board[]>([]);
     const [loading, setLoading] = useState(true);
     const [boardsLoading, setBoardsLoading] = useState(false);
+    const [tab, setTab] = useState<"boards" | "members">("boards");
 
-    // Modals
+    // Create workspace modal
     const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
     const [showCreateBoard, setShowCreateBoard] = useState(false);
     const [wsName, setWsName] = useState("");
     const [boardTitle, setBoardTitle] = useState("");
     const [creating, setCreating] = useState(false);
+
+    // Add member state
+    const [addMemberEmail, setAddMemberEmail] = useState("");
+    const [addMemberRole, setAddMemberRole] = useState("EMPLOYEE");
+    const [addMemberLoading, setAddMemberLoading] = useState(false);
+    const [addMemberError, setAddMemberError] = useState("");
+
+    // Remove member state
+    const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
+
+    const refreshWorkspaces = async (selectId?: number) => {
+        const data = await api.workspaces.getAll();
+        setWorkspaces(data.workspaces);
+        const target = selectId
+            ? data.workspaces.find((w) => w.id === selectId) ?? data.workspaces[0]
+            : data.workspaces.find((w) => w.id === selectedWorkspace?.id) ?? data.workspaces[0];
+        setSelectedWorkspace(target ?? null);
+    };
 
     useEffect(() => {
         api.workspaces.getAll().then((data) => {
@@ -40,15 +59,22 @@ export function DashboardPage() {
         });
     }, [selectedWorkspace]);
 
+    // Reset tab when switching workspace
+    const selectWorkspace = (ws: Workspace) => {
+        setSelectedWorkspace(ws);
+        setTab("boards");
+        setAddMemberEmail("");
+        setAddMemberError("");
+    };
+
     const createWorkspace = async () => {
         if (!wsName.trim()) return;
         setCreating(true);
         const data = await api.workspaces.create({ name: wsName.trim() });
-        setWorkspaces((prev) => [...prev, data.workspace]);
-        setSelectedWorkspace(data.workspace);
         setWsName("");
         setShowCreateWorkspace(false);
         setCreating(false);
+        await refreshWorkspaces(data.workspace.id);
     };
 
     const createBoard = async () => {
@@ -59,6 +85,37 @@ export function DashboardPage() {
         setBoardTitle("");
         setShowCreateBoard(false);
         setCreating(false);
+    };
+
+    const handleAddMember = async () => {
+        if (!addMemberEmail.trim() || !selectedWorkspace) return;
+        setAddMemberLoading(true);
+        setAddMemberError("");
+        try {
+            await api.workspaces.addMember(selectedWorkspace.id, {
+                email: addMemberEmail.trim(),
+                role: addMemberRole,
+            });
+            setAddMemberEmail("");
+            await refreshWorkspaces();
+        } catch (e: any) {
+            setAddMemberError(e.message || "Failed to add member");
+        } finally {
+            setAddMemberLoading(false);
+        }
+    };
+
+    const handleRemoveMember = async (memberId: number) => {
+        if (!selectedWorkspace) return;
+        setRemovingMemberId(memberId);
+        try {
+            await api.workspaces.removeMember(selectedWorkspace.id, memberId);
+            await refreshWorkspaces();
+        } catch (e: any) {
+            alert(e.message || "Failed to remove member");
+        } finally {
+            setRemovingMemberId(null);
+        }
     };
 
     const handleLogout = async () => {
@@ -74,6 +131,9 @@ export function DashboardPage() {
         );
     }
 
+    const members = selectedWorkspace?.members ?? [];
+    const isCurrentUserAdmin = members.find((m) => m.memberId === user?.id)?.role === "ADMIN";
+
     return (
         <div className="min-h-screen bg-bg flex">
             {/* Sidebar */}
@@ -87,7 +147,7 @@ export function DashboardPage() {
                             <rect x="9" y="9" width="6" height="6" rx="1.5" fill="white" opacity="0.5" />
                         </svg>
                     </div>
-                    <span className="font-semibold text-white text-sm">Taskloomm</span>
+                    <span className="font-semibold text-white text-sm">Taskloom</span>
                 </div>
 
                 {/* Workspaces */}
@@ -112,7 +172,7 @@ export function DashboardPage() {
                             {workspaces.map((ws) => (
                                 <button
                                     key={ws.id}
-                                    onClick={() => setSelectedWorkspace(ws)}
+                                    onClick={() => selectWorkspace(ws)}
                                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                                         selectedWorkspace?.id === ws.id
                                             ? "bg-elevated text-white font-medium"
@@ -180,86 +240,205 @@ export function DashboardPage() {
                 ) : (
                     <div className="p-8">
                         {/* Header */}
-                        <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center justify-between mb-6">
                             <div>
                                 <h1 className="text-2xl font-bold text-white">{selectedWorkspace.name}</h1>
                                 <p className="text-slate-500 text-sm mt-0.5">
-                                    {(selectedWorkspace.members ?? []).length} member{(selectedWorkspace.members ?? []).length !== 1 ? "s" : ""}
+                                    {members.length} member{members.length !== 1 ? "s" : ""}
                                 </p>
                             </div>
+                            {tab === "boards" && (
+                                <button
+                                    onClick={() => setShowCreateBoard(true)}
+                                    className="flex items-center gap-2 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                                >
+                                    <svg width="14" height="14" fill="none" viewBox="0 0 12 12">
+                                        <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                    </svg>
+                                    New Board
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex gap-1 mb-6 border-b border-border">
                             <button
-                                onClick={() => setShowCreateBoard(true)}
-                                className="flex items-center gap-2 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                                onClick={() => setTab("boards")}
+                                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                                    tab === "boards"
+                                        ? "border-accent text-white"
+                                        : "border-transparent text-slate-500 hover:text-slate-300"
+                                }`}
                             >
-                                <svg width="14" height="14" fill="none" viewBox="0 0 12 12">
-                                    <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                                </svg>
-                                New Board
+                                Boards
+                            </button>
+                            <button
+                                onClick={() => setTab("members")}
+                                className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                                    tab === "members"
+                                        ? "border-accent text-white"
+                                        : "border-transparent text-slate-500 hover:text-slate-300"
+                                }`}
+                            >
+                                Members
                             </button>
                         </div>
 
-                        {/* Boards grid */}
-                        {boardsLoading ? (
-                            <div className="flex items-center justify-center py-20">
-                                <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                            </div>
-                        ) : boards.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 gap-4">
-                                <div className="w-14 h-14 bg-elevated rounded-2xl flex items-center justify-center">
-                                    <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
-                                        <rect x="3" y="3" width="7" height="11" rx="1.5" stroke="#6366f1" strokeWidth="1.5" />
-                                        <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="#6366f1" strokeWidth="1.5" />
-                                        <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="#64748b" strokeWidth="1.5" />
-                                    </svg>
+                        {/* Boards tab */}
+                        {tab === "boards" && (
+                            boardsLoading ? (
+                                <div className="flex items-center justify-center py-20">
+                                    <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                                 </div>
-                                <div className="text-center">
-                                    <h2 className="text-white font-semibold mb-1">No boards yet</h2>
-                                    <p className="text-slate-500 text-sm">Create your first board to organize work</p>
-                                </div>
-                                <button
-                                    onClick={() => setShowCreateBoard(true)}
-                                    className="bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                                >
-                                    Create board
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {boards.map((board) => (
+                            ) : boards.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                                    <div className="w-14 h-14 bg-elevated rounded-2xl flex items-center justify-center">
+                                        <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
+                                            <rect x="3" y="3" width="7" height="11" rx="1.5" stroke="#6366f1" strokeWidth="1.5" />
+                                            <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="#6366f1" strokeWidth="1.5" />
+                                            <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="#64748b" strokeWidth="1.5" />
+                                        </svg>
+                                    </div>
+                                    <div className="text-center">
+                                        <h2 className="text-white font-semibold mb-1">No boards yet</h2>
+                                        <p className="text-slate-500 text-sm">Create your first board to organize work</p>
+                                    </div>
                                     <button
-                                        key={board.id}
-                                        onClick={() => navigate(`/boards/${board.id}`)}
-                                        className="group bg-surface hover:bg-elevated border border-border hover:border-accent/30 rounded-xl p-5 text-left transition-all duration-150"
+                                        onClick={() => setShowCreateBoard(true)}
+                                        className="bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                                     >
-                                        <div
-                                            className="w-8 h-8 rounded-lg mb-3 flex items-center justify-center text-sm font-bold text-white"
-                                            style={{ background: stringToColor(board.title) }}
+                                        Create board
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                    {boards.map((board) => (
+                                        <button
+                                            key={board.id}
+                                            onClick={() => navigate(`/boards/${board.id}`)}
+                                            className="group bg-surface hover:bg-elevated border border-border hover:border-accent/30 rounded-xl p-5 text-left transition-all duration-150"
                                         >
-                                            {board.title[0]?.toUpperCase()}
+                                            <div
+                                                className="w-8 h-8 rounded-lg mb-3 flex items-center justify-center text-sm font-bold text-white"
+                                                style={{ background: stringToColor(board.title) }}
+                                            >
+                                                {board.title[0]?.toUpperCase()}
+                                            </div>
+                                            <h3 className="text-white font-medium text-sm mb-1 group-hover:text-accent transition-colors">
+                                                {board.title}
+                                            </h3>
+                                            {board.description && (
+                                                <p className="text-slate-500 text-xs line-clamp-2 mb-3">{board.description}</p>
+                                            )}
+                                            <div className="flex items-center gap-1.5">
+                                                {(board.members ?? []).slice(0, 4).map((m) => (
+                                                    <div
+                                                        key={m.memberId}
+                                                        className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                                                        style={{ background: stringToColor(m.user?.name || String(m.memberId)) }}
+                                                        title={m.user?.name}
+                                                    >
+                                                        {m.user?.name[0]?.toUpperCase() || "?"}
+                                                    </div>
+                                                ))}
+                                                {(board.members ?? []).length > 4 && (
+                                                    <span className="text-slate-500 text-xs">+{(board.members ?? []).length - 4}</span>
+                                                )}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )
+                        )}
+
+                        {/* Members tab */}
+                        {tab === "members" && (
+                            <div className="max-w-2xl">
+                                {/* Add member form — only admins */}
+                                {isCurrentUserAdmin && (
+                                    <div className="bg-surface border border-border rounded-xl p-4 mb-6">
+                                        <p className="text-white text-sm font-medium mb-3">Add member</p>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="email"
+                                                placeholder="Email address"
+                                                value={addMemberEmail}
+                                                onChange={(e) => { setAddMemberEmail(e.target.value); setAddMemberError(""); }}
+                                                onKeyDown={(e) => e.key === "Enter" && handleAddMember()}
+                                                className="flex-1 bg-elevated border border-border rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 outline-none focus:border-accent/50 transition-colors"
+                                            />
+                                            <select
+                                                value={addMemberRole}
+                                                onChange={(e) => setAddMemberRole(e.target.value)}
+                                                className="bg-elevated border border-border rounded-lg px-3 py-2 text-white text-sm outline-none"
+                                            >
+                                                <option value="EMPLOYEE">Employee</option>
+                                                <option value="ADMIN">Admin</option>
+                                            </select>
+                                            <button
+                                                onClick={handleAddMember}
+                                                disabled={addMemberLoading || !addMemberEmail.trim()}
+                                                className="bg-accent hover:bg-accent-hover disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                                            >
+                                                {addMemberLoading ? "Adding..." : "Add"}
+                                            </button>
                                         </div>
-                                        <h3 className="text-white font-medium text-sm mb-1 group-hover:text-accent transition-colors">
-                                            {board.title}
-                                        </h3>
-                                        {board.description && (
-                                            <p className="text-slate-500 text-xs line-clamp-2 mb-3">{board.description}</p>
+                                        {addMemberError && (
+                                            <p className="text-red-400 text-xs mt-2">{addMemberError}</p>
                                         )}
-                                        <div className="flex items-center gap-1.5">
-                                            {(board.members ?? []).slice(0, 4).map((m) => (
-                                                <div
-                                                    key={m.memberId}
-                                                    className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                                                    style={{ background: stringToColor(m.user?.name || String(m.memberId)) }}
-                                                    title={m.user?.name}
+                                    </div>
+                                )}
+
+                                {/* Member list */}
+                                <div className="flex flex-col gap-2">
+                                    {members.map((m) => (
+                                        <div
+                                            key={m.memberId}
+                                            className="flex items-center gap-3 bg-surface border border-border rounded-xl px-4 py-3"
+                                        >
+                                            <div
+                                                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
+                                                style={{ background: stringToColor(m.user?.name || String(m.memberId)) }}
+                                            >
+                                                {m.user?.name[0]?.toUpperCase() ?? "?"}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-white text-sm font-medium truncate">
+                                                    {m.user?.name ?? `User #${m.memberId}`}
+                                                    {m.memberId === user?.id && (
+                                                        <span className="text-slate-500 text-xs ml-1">(you)</span>
+                                                    )}
+                                                </p>
+                                                <p className="text-slate-500 text-xs truncate">{m.user?.email}</p>
+                                            </div>
+                                            <span
+                                                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                                    m.role === "ADMIN"
+                                                        ? "bg-accent/20 text-accent"
+                                                        : "bg-elevated text-slate-400"
+                                                }`}
+                                            >
+                                                {m.role === "ADMIN" ? "Admin" : "Employee"}
+                                            </span>
+                                            {isCurrentUserAdmin && m.memberId !== user?.id && (
+                                                <button
+                                                    onClick={() => handleRemoveMember(m.memberId)}
+                                                    disabled={removingMemberId === m.memberId}
+                                                    className="text-slate-600 hover:text-red-400 transition-colors disabled:opacity-50 p-1 rounded"
+                                                    title="Remove member"
                                                 >
-                                                    {m.user?.name[0]?.toUpperCase() || "?"}
-                                                </div>
-                                            ))}
-                                            {(board.members ?? []).length > 4 && (
-                                                <span className="text-slate-500 text-xs">+{(board.members ?? []).length - 4}</span>
+                                                    {removingMemberId === m.memberId ? (
+                                                        <div className="w-4 h-4 border border-current border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                                                            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                                        </svg>
+                                                    )}
+                                                </button>
                                             )}
                                         </div>
-                                    </button>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
