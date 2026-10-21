@@ -61,12 +61,10 @@ export const sendInvite = async (req: Request, res: Response) => {
             </div>
         `;
 
-        try {
-            await sendEmail(email, `Invite to join ${workspace.name} on Taskloom`, html);
-        } catch (emailErr) {
-            // Email delivery failed (e.g. missing SMTP config) — invite record still exists in DB
-            console.error("Email send failed (invite still created):", emailErr);
-        }
+        // Fire-and-forget — don't block the response on email delivery
+        // (if SMTP isn't configured, nodemailer hangs for minutes before timing out)
+        sendEmail(email, `Invite to join ${workspace.name} on Taskloom`, html)
+            .catch((emailErr) => console.error("Email send failed (invite still created):", emailErr));
 
         return res.status(200).json({ message: "Invite sent", inviteUrl });
     } catch (error) {
