@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -36,6 +36,8 @@ export function DashboardPage() {
     const [addMsgType, setAddMsgType] = useState<"success" | "error">("success");
     const [inviteLink, setInviteLink] = useState<string | null>(null);
     const [linkCopied, setLinkCopied] = useState(false);
+    const [addSlow, setAddSlow] = useState(false);
+    const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Remove member state
     const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
@@ -101,6 +103,9 @@ export function DashboardPage() {
         setAddLoading(true);
         setAddMsg("");
         setInviteLink(null);
+        setAddSlow(false);
+        // Show "server starting up" hint after 3 seconds
+        slowTimerRef.current = setTimeout(() => setAddSlow(true), 3000);
         try {
             // One request handles everything:
             // - user exists on Taskloom → added directly (201 "Member added")
@@ -124,9 +129,12 @@ export function DashboardPage() {
             setAddMsg(e.message || "Failed to add member");
             setAddMsgType("error");
         } finally {
+            if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+            setAddSlow(false);
             setAddLoading(false);
         }
     };
+
 
     const handleCopyLink = () => {
         if (!inviteLink) return;
@@ -505,9 +513,22 @@ export function DashboardPage() {
                                                 disabled={addLoading || !addEmail.trim()}
                                                 className="bg-accent hover:bg-accent-hover disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                                             >
-                                                {addLoading ? "..." : "Add"}
+                                                {addLoading ? (
+                                                    <span className="flex items-center gap-1.5">
+                                                        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                                                        </svg>
+                                                        Adding
+                                                    </span>
+                                                ) : "Add"}
                                             </button>
                                         </div>
+                                        {addSlow && (
+                                            <p className="text-xs mt-2 text-slate-500 animate-pulse">
+                                                ⏳ Server is starting up, please wait a moment…
+                                            </p>
+                                        )}
                                         {addMsg && (
                                             <p className={`text-xs mt-2 ${addMsgType === "success" ? "text-green-400" : "text-red-400"}`}>
                                                 {addMsg}
