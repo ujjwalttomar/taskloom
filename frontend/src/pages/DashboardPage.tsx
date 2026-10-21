@@ -34,6 +34,8 @@ export function DashboardPage() {
     const [addLoading, setAddLoading] = useState(false);
     const [addMsg, setAddMsg] = useState("");
     const [addMsgType, setAddMsgType] = useState<"success" | "error">("success");
+    const [inviteLink, setInviteLink] = useState<string | null>(null);
+    const [linkCopied, setLinkCopied] = useState(false);
 
     // Remove member state
     const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
@@ -98,6 +100,7 @@ export function DashboardPage() {
         if (!addEmail.trim() || !selectedWorkspace) return;
         setAddLoading(true);
         setAddMsg("");
+        setInviteLink(null);
         try {
             // Try direct add first
             await api.workspaces.addMember(selectedWorkspace.id, {
@@ -112,9 +115,10 @@ export function DashboardPage() {
             // If user not on Taskloom, send invite instead
             if (e.message === "User not found") {
                 try {
-                    await api.invites.send(selectedWorkspace.id, { email: addEmail.trim(), role: addRole });
-                    setAddMsg(`Invite sent to ${addEmail.trim()}`);
+                    const res = await api.invites.send(selectedWorkspace.id, { email: addEmail.trim(), role: addRole });
+                    setAddMsg(`Invite sent to ${addEmail.trim()}${res.inviteUrl ? " — copy the link below if they don't receive an email:" : ""}`);
                     setAddMsgType("success");
+                    if (res.inviteUrl) setInviteLink(res.inviteUrl);
                     setAddEmail("");
                 } catch (ie: any) {
                     setAddMsg(ie.message || "Failed to send invite");
@@ -126,8 +130,15 @@ export function DashboardPage() {
             }
         } finally {
             setAddLoading(false);
-            setTimeout(() => setAddMsg(""), 4000);
         }
+    };
+
+    const handleCopyLink = () => {
+        if (!inviteLink) return;
+        navigator.clipboard.writeText(inviteLink).then(() => {
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 2000);
+        });
     };
 
     const handleRemoveMember = async (memberId: number) => {
@@ -506,6 +517,17 @@ export function DashboardPage() {
                                             <p className={`text-xs mt-2 ${addMsgType === "success" ? "text-green-400" : "text-red-400"}`}>
                                                 {addMsg}
                                             </p>
+                                        )}
+                                        {inviteLink && (
+                                            <div className="mt-3 flex items-center gap-2 bg-elevated border border-border rounded-lg px-3 py-2">
+                                                <span className="flex-1 text-xs text-slate-400 truncate font-mono">{inviteLink}</span>
+                                                <button
+                                                    onClick={handleCopyLink}
+                                                    className="shrink-0 text-xs text-accent hover:text-accent-hover font-medium transition-colors"
+                                                >
+                                                    {linkCopied ? "Copied!" : "Copy"}
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 )}

@@ -182,7 +182,7 @@ export const api = {
 
     invites: {
         send: (workspaceId: number, data: { email: string; role?: string }) =>
-            request<{ message: string }>(`/api/workspaces/${workspaceId}/invites`, {
+            request<{ message: string; inviteUrl?: string }>(`/api/workspaces/${workspaceId}/invites`, {
                 method: "POST",
                 body: JSON.stringify(data),
             }),
