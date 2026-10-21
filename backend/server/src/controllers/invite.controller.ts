@@ -18,7 +18,7 @@ export const sendInvite = async (req: Request, res: Response) => {
         });
         if (!workspace) return res.status(404).json({ message: "Workspace not found" });
 
-        // check if already a member
+        // If user already exists on Taskloom, add them directly — no invite needed
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser) {
             const alreadyMember = await prisma.workspaceMember.findUnique({
@@ -27,9 +27,14 @@ export const sendInvite = async (req: Request, res: Response) => {
             if (alreadyMember) {
                 return res.status(409).json({ message: "User is already a member" });
             }
+            // Add them straight away
+            await prisma.workspaceMember.create({
+                data: { workspaceId, memberId: existingUser.id, role: memberRole },
+            });
+            return res.status(201).json({ message: "Member added" });
         }
 
-        // delete any existing pending invite for this email+workspace
+        // User not on Taskloom — create an invite link
         await prisma.workspaceInvite.deleteMany({
             where: { workspaceId, email, accepted: false },
         });

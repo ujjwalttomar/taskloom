@@ -102,32 +102,27 @@ export function DashboardPage() {
         setAddMsg("");
         setInviteLink(null);
         try {
-            // Try direct add first
-            await api.workspaces.addMember(selectedWorkspace.id, {
+            // One request handles everything:
+            // - user exists on Taskloom → added directly (201 "Member added")
+            // - user not on Taskloom → invite link created (200 "Invite sent")
+            const res = await api.invites.send(selectedWorkspace.id, {
                 email: addEmail.trim(),
                 role: addRole,
             });
-            setAddMsg("Member added!");
+            if (res.inviteUrl) {
+                // Not on Taskloom yet — show copyable invite link
+                setAddMsg(`Invite link created for ${addEmail.trim()} — share it with them:`);
+                setInviteLink(res.inviteUrl);
+            } else {
+                // Already on Taskloom — added directly
+                setAddMsg("Member added!");
+                await refreshWorkspaces();
+            }
             setAddMsgType("success");
             setAddEmail("");
-            await refreshWorkspaces();
         } catch (e: any) {
-            // If user not on Taskloom, send invite instead
-            if (e.message === "User not found") {
-                try {
-                    const res = await api.invites.send(selectedWorkspace.id, { email: addEmail.trim(), role: addRole });
-                    setAddMsg(`Invite sent to ${addEmail.trim()}${res.inviteUrl ? " — copy the link below if they don't receive an email:" : ""}`);
-                    setAddMsgType("success");
-                    if (res.inviteUrl) setInviteLink(res.inviteUrl);
-                    setAddEmail("");
-                } catch (ie: any) {
-                    setAddMsg(ie.message || "Failed to send invite");
-                    setAddMsgType("error");
-                }
-            } else {
-                setAddMsg(e.message || "Failed to add member");
-                setAddMsgType("error");
-            }
+            setAddMsg(e.message || "Failed to add member");
+            setAddMsgType("error");
         } finally {
             setAddLoading(false);
         }
