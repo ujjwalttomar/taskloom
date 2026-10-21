@@ -56,9 +56,14 @@ export const sendInvite = async (req: Request, res: Response) => {
             </div>
         `;
 
-        await sendEmail(email, `Invite to join ${workspace.name} on Taskloom`, html);
+        try {
+            await sendEmail(email, `Invite to join ${workspace.name} on Taskloom`, html);
+        } catch (emailErr) {
+            // Email delivery failed (e.g. missing SMTP config) — invite record still exists in DB
+            console.error("Email send failed (invite still created):", emailErr);
+        }
 
-        return res.status(200).json({ message: "Invite sent" });
+        return res.status(200).json({ message: "Invite sent", inviteUrl });
     } catch (error) {
         return res.status(500).json({ message: "Server error", error });
     }

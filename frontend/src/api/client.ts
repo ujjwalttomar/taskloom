@@ -7,6 +7,31 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         ...options,
     });
 
+    // On 401, try to refresh the access token and retry once
+    if (res.status === 401) {
+        try {
+            const refreshRes = await fetch(`${BASE}/auth/refresh`, {
+                method: "POST",
+                credentials: "include",
+            });
+            if (!refreshRes.ok) throw new Error("refresh failed");
+
+            // Retry original request with fresh token
+            const retryRes = await fetch(`${BASE}${path}`, {
+                credentials: "include",
+                headers: { "Content-Type": "application/json", ...options?.headers },
+                ...options,
+            });
+            if (!retryRes.ok) {
+                const err = await retryRes.json().catch(() => ({ message: "Session expired" }));
+                throw new Error(err.message || "Session expired");
+            }
+            return retryRes.json();
+        } catch {
+            throw new Error("Session expired. Please log in again.");
+        }
+    }
+
     if (!res.ok) {
         const err = await res.json().catch(() => ({ message: "Request failed" }));
         throw new Error(err.message || "Request failed");
