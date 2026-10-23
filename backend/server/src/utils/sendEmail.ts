@@ -5,22 +5,18 @@ export async function sendEmail(to: string, subject: string, html: string) {
         return;
     }
 
+    const from = process.env.EMAIL_FROM || "Taskloom <onboarding@resend.dev>";
+
     const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
             "Authorization": `Bearer ${apiKey}`,
             "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-            from: "Taskloom <onboarding@resend.dev>",
-            to,
-            subject,
-            html,
-        }),
+        body: JSON.stringify({ from, to, subject, html }),
     });
 
-    if (!res.ok) {
-        const err = await res.json();
-        throw new Error(`Resend error: ${JSON.stringify(err)}`);
-    }
+    const body = await res.text();
+    if (!res.ok) throw new Error(`Resend ${res.status}: ${body}`);
+    console.log(`Resend accepted email to ${to}: ${body}`);
 }

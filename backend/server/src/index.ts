@@ -38,6 +38,8 @@ app.get("/health", (req, res)=>{
 
 
 
-app.listen(PORT, ()=>{
-    console.log(`servers is running at${PORT}`);
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log("RESEND_API_KEY present:", !!process.env.RESEND_API_KEY);
+    console.log("EMAIL_FROM:", process.env.EMAIL_FROM || "onboarding@resend.dev (default)");
 });
