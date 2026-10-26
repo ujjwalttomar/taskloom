@@ -1,102 +1,76 @@
 import { Request, Response } from "express";
-import prisma from "../../../shared/db/client";
-import { publishBoardEvent } from "../redis";
+import { CreateListSchema, EditListSchema, ChangeListOrderSchema } from "../schemas/list.schemas";
+import * as listService from "../services/list.service";
+import { AppError } from "../utils/AppError";
+
+function handleError(res: Response, error: unknown) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ message: error.message });
+    return res.status(500).json({ message: "Server error" });
+}
+
+function firstIssue(err: { issues: { message: string }[] }) {
+    return err.issues[0]?.message ?? "Validation error";
+}
 
 export const getAllLists = async (req: Request, res: Response) => {
     try {
-        const boardId = parseInt(req.params.boardId as string);
-        const lists = await prisma.list.findMany({
-            where: { boardId },
-            orderBy: { order: "asc" },
-            include: { cards: { orderBy: { order: "asc" } } },
-        });
+        const boardId = parseInt(req.params["boardId"] as string);
+        const lists = await listService.getAllLists(boardId);
         return res.status(200).json({ lists });
     } catch (error) {
-        return res.status(500).json({ message: "Server error" });
+        return handleError(res, error);
     }
 };
 
 export const createList = async (req: Request, res: Response) => {
     try {
-        const boardId = parseInt(req.params.boardId as string);
-        const { title } = req.body;
-        if (!title) return res.status(400).json({ message: "List title is missing" });
+        const parsed = CreateListSchema.safeParse({ body: req.body });
+        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
 
-        const lastList = await prisma.list.findFirst({
-            where: { boardId },
-            orderBy: { order: "desc" },
-        });
-        const order = lastList ? lastList.order + 1 : 1;
-
-        const list = await prisma.list.create({ data: { title, boardId, order } });
-        publishBoardEvent(boardId, req.userId!, { type: "list_created", list });
+        const boardId = parseInt(req.params["boardId"] as string);
+        const list = await listService.createList(boardId, req.userId!, parsed.data.body.title);
         return res.status(201).json({ message: "List created", list });
     } catch (error) {
-        return res.status(500).json({ message: "Server error" });
+        return handleError(res, error);
     }
 };
 
 export const editList = async (req: Request, res: Response) => {
     try {
-        const boardId = parseInt(req.params.boardId as string);
-        const listId = parseInt(req.params.listId as string);
-        const { title } = req.body;
+        const parsed = EditListSchema.safeParse({ body: req.body });
+        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
 
-        const list = await prisma.list.update({ where: { id: listId }, data: { title } });
-        publishBoardEvent(boardId, req.userId!, { type: "list_edited", list });
+        const boardId = parseInt(req.params["boardId"] as string);
+        const listId = parseInt(req.params["listId"] as string);
+        const list = await listService.editList(boardId, listId, req.userId!, parsed.data.body.title);
         return res.status(200).json({ list });
     } catch (error) {
-        return res.status(500).json({ message: "Server error" });
+        return handleError(res, error);
     }
 };
 
 export const deleteList = async (req: Request, res: Response) => {
     try {
-        const boardId = parseInt(req.params.boardId as string);
-        const listId = parseInt(req.params.listId as string);
-
-        await prisma.list.delete({ where: { id: listId } });
-        publishBoardEvent(boardId, req.userId!, { type: "list_deleted", listId });
+        const boardId = parseInt(req.params["boardId"] as string);
+        const listId = parseInt(req.params["listId"] as string);
+        await listService.deleteList(boardId, listId, req.userId!);
         return res.status(200).json({ message: "List deleted", listId });
     } catch (error) {
-        return res.status(500).json({ message: "Server error" });
+        return handleError(res, error);
     }
 };
 
 export const changeOrder = async (req: Request, res: Response) => {
     try {
-        const boardId = parseInt(req.params.boardId as string);
-        const listId = parseInt(req.params.listId as string);
-        const { afterListId, beforeListId } = req.body;
+        const parsed = ChangeListOrderSchema.safeParse({ body: req.body });
+        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
 
-        let newOrder: number;
-
-        if (afterListId && beforeListId) {
-            const afterList = await prisma.list.findUnique({ where: { id: afterListId } });
-            const beforeList = await prisma.list.findUnique({ where: { id: beforeListId } });
-            if (!afterList || !beforeList) {
-                return res.status(404).json({ message: "Adjacent list not found" });
-            }
-            newOrder = (afterList.order + beforeList.order) / 2;
-        } else if (afterListId) {
-            const afterList = await prisma.list.findUnique({ where: { id: afterListId } });
-            if (!afterList) return res.status(404).json({ message: "List not found" });
-            newOrder = afterList.order + 1;
-        } else if (beforeListId) {
-            const beforeList = await prisma.list.findUnique({ where: { id: beforeListId } });
-            if (!beforeList) return res.status(404).json({ message: "List not found" });
-            newOrder = beforeList.order / 2;
-        } else {
-            return res.status(400).json({ message: "Provide afterListId or beforeListId" });
-        }
-
-        const list = await prisma.list.update({
-            where: { id: listId },
-            data: { order: newOrder },
-        });
-        publishBoardEvent(boardId, req.userId!, { type: "list_reordered", list });
+        const boardId = parseInt(req.params["boardId"] as string);
+        const listId = parseInt(req.params["listId"] as string);
+        const { afterListId, beforeListId } = parsed.data.body;
+        const list = await listService.changeListOrder(boardId, listId, req.userId!, afterListId, beforeListId);
         return res.status(200).json({ list });
     } catch (error) {
-        return res.status(500).json({ message: "Server error" });
+        return handleError(res, error);
     }
 };
