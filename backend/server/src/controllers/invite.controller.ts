@@ -47,7 +47,8 @@ export const getInviteDetails = async (req: Request, res: Response) => {
 export const acceptInvite = async (req: Request, res: Response) => {
     try {
         const result = await inviteService.acceptInvite(req.params["token"] as string, req.userId!);
-        return res.status(200).json({ message: "Joined workspace", workspaceId: result.workspaceId });
+        const message = result.alreadyMember ? "Already a member" : "Joined workspace";
+        return res.status(200).json({ message, workspaceId: result.workspaceId });
     } catch (error) {
         return handleError(res, error);
     }

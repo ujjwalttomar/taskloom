@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-import { ZodError } from "zod";
 import { GoogleCallbackSchema } from "../schemas/auth.schemas";
 import * as authService from "../services/auth.service";
 import { AppError } from "../utils/AppError";

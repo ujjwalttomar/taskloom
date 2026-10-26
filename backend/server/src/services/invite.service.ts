@@ -78,9 +78,9 @@ export async function acceptInvite(token: string, userId: number) {
     const existing = await repo.findWorkspaceMember(invite.workspaceId, userId);
     if (existing) {
         await repo.markInviteAccepted(token);
-        return { workspaceId: invite.workspaceId };
+        return { workspaceId: invite.workspaceId, alreadyMember: true as const };
     }
 
     await repo.acceptInviteTransaction(invite.workspaceId, userId, invite.role, token);
-    return { workspaceId: invite.workspaceId };
+    return { workspaceId: invite.workspaceId, alreadyMember: false as const };
 }
