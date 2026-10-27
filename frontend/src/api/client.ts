@@ -178,6 +178,15 @@ export const api = {
             request<{ commentId: number }>(`/api/comments/${commentId}`, { method: "DELETE" }),
     },
 
+    // ─── User Profiles ───────────────────────────────────
+
+    userProfiles: {
+        getBoardProfile: (boardId: number, memberId: number) =>
+            request<{ profile: import("../types").BoardProfile }>(`/api/boards/${boardId}/members/${memberId}/profile`),
+        getWorkspaceProfile: (workspaceId: number, memberId: number) =>
+            request<{ profile: import("../types").WorkspaceProfile }>(`/api/workspaces/${workspaceId}/members/${memberId}/profile`),
+    },
+
     // ─── Invites ─────────────────────────────────────────
 
     invites: {

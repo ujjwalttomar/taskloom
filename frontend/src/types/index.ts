@@ -95,4 +95,36 @@ export type WsEvent =
     | { type: "comment_deleted"; commentId: number }
     | { type: "member_added"; member: BoardMember }
     | { type: "member_role_updated"; member: BoardMember }
-    | { type: "member_removed"; memberId: number };
+    | { type: "member_removed"; memberId: number }
+    | { type: "user_joined_board"; userId: number }
+    | { type: "user_left_board"; userId: number }
+    | { type: "board_presence"; onlineUserIds: number[] };
+
+export interface BoardProfile {
+    user: { id: number; name: string; email: string };
+    role: "ADMIN" | "EMPLOYEE";
+    joinedAt: string | null;
+    assignedCards: {
+        cardId: number;
+        title: string;
+        description?: string;
+        listId: number;
+        listTitle: string;
+    }[];
+}
+
+export interface WorkspaceProfile {
+    user: { id: number; name: string; email: string };
+    workspaceRole: "ADMIN" | "EMPLOYEE";
+    workspaceJoinedAt: string | null;
+    boards: { boardId: number; title: string; role: "ADMIN" | "EMPLOYEE" }[];
+    assignedCards: {
+        cardId: number;
+        title: string;
+        description?: string;
+        listId: number;
+        listTitle: string;
+        boardId: number;
+        boardTitle: string;
+    }[];
+}

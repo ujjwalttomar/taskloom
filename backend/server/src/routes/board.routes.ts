@@ -1,5 +1,6 @@
 import express from "express";
 import { getAllBoards, createBoard, getSpecificBoard, editBoard, deleteBoard, addMember, updateBoardMemberRole, deleteMember } from "../controllers/board.controller";
+import { getBoardProfile } from "../controllers/userProfile.controller";
 import { authenticate, isMember } from "../middlewares/auth.middleware";
 import { isBoardMember, isBoardAdmin } from "../middlewares/board.middleware";
 
@@ -13,5 +14,6 @@ router.delete("/boards/:boardId", authenticate, isBoardMember, isBoardAdmin, del
 router.post("/boards/:boardId/members", authenticate, isBoardMember, isBoardAdmin, addMember);
 router.patch("/boards/:boardId/members/:memberId", authenticate, isBoardMember, isBoardAdmin, updateBoardMemberRole);
 router.delete("/boards/:boardId/members/:memberId", authenticate, isBoardMember, isBoardAdmin, deleteMember);
+router.get("/boards/:boardId/members/:memberId/profile", authenticate, getBoardProfile);
 
 export default router;

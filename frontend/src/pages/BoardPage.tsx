@@ -22,6 +22,7 @@ import { api } from "../api/client";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { List } from "../components/List";
 import { CardModal } from "../components/CardModal";
+import { UserCardModal } from "../components/UserCardModal";
 import type { Board, List as ListType, Card, WsEvent } from "../types";
 
 // Custom collision detection: prefer pointerWithin, fall back to rectIntersection
@@ -66,6 +67,12 @@ export function BoardPage() {
 
     // Snapshot of lists at drag start — used to revert on failure
     const [listsSnapshot, setListsSnapshot] = useState<ListType[]>([]);
+
+    // Online presence
+    const [onlineUserIds, setOnlineUserIds] = useState<Set<number>>(new Set());
+
+    // User card modal
+    const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -131,6 +138,19 @@ export function BoardPage() {
                             ? { ...l, cards: [...l.cards, event.card].sort((a, b) => a.order - b.order) }
                             : l
                     );
+                });
+                break;
+            case "board_presence":
+                setOnlineUserIds(new Set(event.onlineUserIds));
+                break;
+            case "user_joined_board":
+                setOnlineUserIds((prev) => new Set([...prev, event.userId]));
+                break;
+            case "user_left_board":
+                setOnlineUserIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(event.userId);
+                    return next;
                 });
                 break;
         }
@@ -464,9 +484,10 @@ export function BoardPage() {
                     {/* Members avatars */}
                     <div className="flex items-center">
                         {(board?.members ?? []).slice(0, 5).map((m, i) => (
-                            <div
+                            <button
                                 key={m.memberId}
-                                className="w-7 h-7 rounded-full border-2 border-bg flex items-center justify-center text-xs font-bold text-white"
+                                onClick={() => setSelectedUserId(m.memberId)}
+                                className="relative w-7 h-7 rounded-full border-2 border-bg flex items-center justify-center text-xs font-bold text-white hover:ring-2 hover:ring-accent/50 transition-all"
                                 style={{
                                     background: stringToColor(m.user?.name || String(m.memberId)),
                                     marginLeft: i > 0 ? "-6px" : 0,
@@ -474,7 +495,10 @@ export function BoardPage() {
                                 title={m.user?.name}
                             >
                                 {m.user?.name[0]?.toUpperCase() ?? "?"}
-                            </div>
+                                {onlineUserIds.has(m.memberId) && (
+                                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 border-2 border-bg rounded-full" />
+                                )}
+                            </button>
                         ))}
                         {(board?.members.length ?? 0) > 5 && (
                             <div
@@ -516,12 +540,17 @@ export function BoardPage() {
                                 <div className="max-h-56 overflow-y-auto">
                                     {(board?.members ?? []).map((m) => (
                                         <div key={m.memberId} className="flex items-center gap-2 px-4 py-2.5 hover:bg-bg/50">
-                                            <div
-                                                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+                                            <button
+                                                onClick={() => { setShowMembers(false); setSelectedUserId(m.memberId); }}
+                                                className="relative w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 hover:ring-2 hover:ring-accent/50 transition-all"
                                                 style={{ background: stringToColor(m.user?.name || String(m.memberId)) }}
+                                                title="View profile"
                                             >
                                                 {m.user?.name[0]?.toUpperCase() ?? "?"}
-                                            </div>
+                                                {onlineUserIds.has(m.memberId) && (
+                                                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 border-2 border-elevated rounded-full" />
+                                                )}
+                                            </button>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-white text-xs font-medium truncate">{m.user?.name ?? `User #${m.memberId}`}</p>
                                                 <p className="text-slate-500 text-xs truncate">{m.user?.email}</p>
@@ -705,6 +734,17 @@ export function BoardPage() {
                     onClose={() => setSelectedCardId(null)}
                     onCardUpdated={handleCardUpdated}
                     onCardDeleted={handleCardDeleted}
+                />
+            )}
+
+            {/* User Card Modal */}
+            {selectedUserId !== null && (
+                <UserCardModal
+                    userId={selectedUserId}
+                    boardId={boardId}
+                    workspaceId={board?.workspaceId ?? 0}
+                    isOnline={onlineUserIds.has(selectedUserId)}
+                    onClose={() => setSelectedUserId(null)}
                 />
             )}
         </div>

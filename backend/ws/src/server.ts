@@ -68,8 +68,23 @@ wss.on("connection", (ws: AuthenticatedSocket) => {
 function joinRoom(ws: AuthenticatedSocket, boardId: number) {
     leaveRoom(ws);
     if (!rooms.has(boardId)) rooms.set(boardId, new Set());
-    rooms.get(boardId)!.add(ws);
+    const room = rooms.get(boardId)!;
+    room.add(ws);
     ws.boardId = boardId;
+
+    // Broadcast user_joined_board to all OTHER sockets in the room
+    const joinedEvent = JSON.stringify({ type: "user_joined_board", userId: ws.userId });
+    for (const socket of room) {
+        if (socket !== ws && socket.readyState === WebSocket.OPEN) {
+            socket.send(joinedEvent);
+        }
+    }
+
+    // Send board_presence back to the joining socket with ALL currently online userIds
+    const onlineUserIds = Array.from(new Set(Array.from(room).map((s) => s.userId)));
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "board_presence", onlineUserIds }));
+    }
 }
 
 function leaveRoom(ws: AuthenticatedSocket) {
@@ -77,6 +92,18 @@ function leaveRoom(ws: AuthenticatedSocket) {
         const room = rooms.get(ws.boardId);
         if (room) {
             room.delete(ws);
+
+            // Only broadcast user_left_board if this user has NO other sockets in the room
+            const userStillPresent = Array.from(room).some((s) => s.userId === ws.userId);
+            if (!userStillPresent) {
+                const leftEvent = JSON.stringify({ type: "user_left_board", userId: ws.userId });
+                for (const socket of room) {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(leftEvent);
+                    }
+                }
+            }
+
             if (room.size === 0) rooms.delete(ws.boardId);
         }
         ws.boardId = undefined;
