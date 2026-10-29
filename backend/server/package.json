@@ -19,7 +19,8 @@
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^10.1.0",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
