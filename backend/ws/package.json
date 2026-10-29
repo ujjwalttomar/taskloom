@@ -2,7 +2,8 @@
     "name": "taskloom-ws",
     "version": "1.0.0",
     "scripts": {
-        "dev": "tsx watch src/server.ts"
+        "dev": "tsx watch src/server.ts",
+        "start": "tsx src/server.ts"
     },
     "dependencies": {
         "dotenv": "^18.0.1",
