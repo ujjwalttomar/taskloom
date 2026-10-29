@@ -3,6 +3,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import prisma from "../../../shared/db/client";
 import authRouter from "./routes/auth.routes";
 import boardRouter from "./routes/board.routes";
 import commentRouter from "./routes/comment.routes";
@@ -34,12 +35,18 @@ app.use("/api", inviteRouter);
 
 app.get("/health", (req, res)=>{
     res.status(200).json({status : "ok"});
-})
+});
+
+app.get("/health/db", async (_req, res) => {
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        res.json({ ok: true });
+    } catch (e: any) {
+        res.status(500).json({ message: e.message });
+    }
+});
 
 
-
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log("RESEND_API_KEY present:", !!process.env.RESEND_API_KEY);
-    console.log("EMAIL_FROM:", process.env.EMAIL_FROM || "onboarding@resend.dev (default)");
+app.listen(PORT, ()=>{
+    console.log(`servers is running at${PORT}`);
 });

@@ -1,5 +1,12 @@
 {
-    "rewrites": [
-        { "source": "/(.*)", "destination": "/index.html" }
-    ]
+  "rewrites": [
+    {
+      "source": "/auth/:path*",
+      "destination": "https://taskloom-g63n.onrender.com/auth/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://taskloom-g63n.onrender.com/api/:path*"
+    }
+  ]
 }

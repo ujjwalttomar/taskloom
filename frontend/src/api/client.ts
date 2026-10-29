@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const BASE = import.meta.env.VITE_API_URL ?? "";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const res = await fetch(`${BASE}${path}`, {
@@ -6,31 +6,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         headers: { "Content-Type": "application/json", ...options?.headers },
         ...options,
     });
-
-    // On 401, try to refresh the access token and retry once
-    if (res.status === 401) {
-        try {
-            const refreshRes = await fetch(`${BASE}/auth/refresh`, {
-                method: "POST",
-                credentials: "include",
-            });
-            if (!refreshRes.ok) throw new Error("refresh failed");
-
-            // Retry original request with fresh token
-            const retryRes = await fetch(`${BASE}${path}`, {
-                credentials: "include",
-                headers: { "Content-Type": "application/json", ...options?.headers },
-                ...options,
-            });
-            if (!retryRes.ok) {
-                const err = await retryRes.json().catch(() => ({ message: "Session expired" }));
-                throw new Error(err.message || "Session expired");
-            }
-            return retryRes.json();
-        } catch {
-            throw new Error("Session expired. Please log in again.");
-        }
-    }
 
     if (!res.ok) {
         const err = await res.json().catch(() => ({ message: "Request failed" }));
@@ -67,11 +42,6 @@ export const api = {
         delete: (id: number) => request(`/api/workspaces/${id}`, { method: "DELETE" }),
         addMember: (id: number, data: { email: string; role?: string }) =>
             request(`/api/workspaces/${id}/members`, { method: "POST", body: JSON.stringify(data) }),
-        updateMemberRole: (id: number, memberId: number, role: string) =>
-            request(`/api/workspaces/${id}/members/${memberId}`, {
-                method: "PATCH",
-                body: JSON.stringify({ role }),
-            }),
         removeMember: (id: number, memberId: number) =>
             request(`/api/workspaces/${id}/members/${memberId}`, { method: "DELETE" }),
     },
@@ -95,15 +65,7 @@ export const api = {
             }),
         delete: (boardId: number) => request(`/api/boards/${boardId}`, { method: "DELETE" }),
         addMember: (boardId: number, data: { email: string; role?: string }) =>
-            request<{ member: import("../types").BoardMember }>(`/api/boards/${boardId}/members`, {
-                method: "POST",
-                body: JSON.stringify(data),
-            }),
-        updateMemberRole: (boardId: number, memberId: number, role: string) =>
-            request(`/api/boards/${boardId}/members/${memberId}`, {
-                method: "PATCH",
-                body: JSON.stringify({ role }),
-            }),
+            request(`/api/boards/${boardId}/members`, { method: "POST", body: JSON.stringify(data) }),
         removeMember: (boardId: number, memberId: number) =>
             request(`/api/boards/${boardId}/members/${memberId}`, { method: "DELETE" }),
     },
@@ -153,12 +115,9 @@ export const api = {
                 body: JSON.stringify(data),
             }),
         assign: (cardId: number, userId: number) =>
-            request<{ assignment: import("../types").AssignedCard }>(`/api/cards/${cardId}/assign`, {
-                method: "POST",
-                body: JSON.stringify({ userId }),
-            }),
+            request(`/api/cards/${cardId}/assignees`, { method: "POST", body: JSON.stringify({ userId }) }),
         unassign: (cardId: number, userId: number) =>
-            request(`/api/cards/${cardId}/assign/${userId}`, { method: "DELETE" }),
+            request(`/api/cards/${cardId}/assignees/${userId}`, { method: "DELETE" }),
     },
 
     // ─── Comments ────────────────────────────────────────
@@ -178,20 +137,11 @@ export const api = {
             request<{ commentId: number }>(`/api/comments/${commentId}`, { method: "DELETE" }),
     },
 
-    // ─── User Profiles ───────────────────────────────────
-
-    userProfiles: {
-        getBoardProfile: (boardId: number, memberId: number) =>
-            request<{ profile: import("../types").BoardProfile }>(`/api/boards/${boardId}/members/${memberId}/profile`),
-        getWorkspaceProfile: (workspaceId: number, memberId: number) =>
-            request<{ profile: import("../types").WorkspaceProfile }>(`/api/workspaces/${workspaceId}/members/${memberId}/profile`),
-    },
-
     // ─── Invites ─────────────────────────────────────────
 
     invites: {
         send: (workspaceId: number, data: { email: string; role?: string }) =>
-            request<{ message: string; inviteUrl?: string }>(`/api/workspaces/${workspaceId}/invites`, {
+            request<{ message: string }>(`/api/workspaces/${workspaceId}/invites`, {
                 method: "POST",
                 body: JSON.stringify(data),
             }),
