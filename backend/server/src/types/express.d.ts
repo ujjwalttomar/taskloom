@@ -1,4 +1,4 @@
-import { BoardMember, WorkspaceMember } from "../../../shared/db/generated/prisma/client";
+import { BoardMember, WorkspaceMember } from "@prisma/client";
 
 declare global {
     namespace Express {

@@ -3,7 +3,8 @@
     "version": "1.0.0",
     "scripts": {
         "dev": "tsx watch src/index.ts",
-        "build": "prisma generate --schema=../shared/db/prisma/schema.prisma && tsc"
+        "build": "prisma generate --schema=../shared/db/prisma/schema.prisma && tsc",
+        "postinstall": "prisma generate --schema=../shared/db/prisma/schema.prisma"
     },
     "dependencies": {
         "@prisma/client": "^6.0.0",
