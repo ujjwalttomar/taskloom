@@ -1,4 +1,4 @@
-import prisma from "../../../../shared/db/client";
+import prisma from "../../../shared/db/client";
 
 export const findAllLists = (boardId: number) =>
     prisma.list.findMany({

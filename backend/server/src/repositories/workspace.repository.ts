@@ -1,4 +1,4 @@
-import prisma from "../../../../shared/db/client";
+import prisma from "../../../shared/db/client";
 
 export const findAllWorkspacesForUser = (userId: number) =>
     prisma.workspace.findMany({

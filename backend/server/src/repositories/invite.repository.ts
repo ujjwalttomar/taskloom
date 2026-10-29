@@ -1,4 +1,4 @@
-import prisma from "../../../../shared/db/client";
+import prisma from "../../../shared/db/client";
 
 export const findInviteByToken = (token: string) =>
     prisma.workspaceInvite.findUnique({ where: { token } });

@@ -1,5 +1,5 @@
 import { OAuth2Client } from "google-auth-library";
-import { signAccessToken, generateRefreshToken } from "../../../../shared/auth/token";
+import { signAccessToken, generateRefreshToken } from "../../../shared/auth/token";
 import * as userRepo from "../repositories/user.repository";
 import * as tokenRepo from "../repositories/refreshToken.repository";
 import { AppError } from "../utils/AppError";

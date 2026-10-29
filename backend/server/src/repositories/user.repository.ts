@@ -1,4 +1,4 @@
-import prisma from "../../../../shared/db/client";
+import prisma from "../../../shared/db/client";
 
 export const findUserById = (id: number) =>
     prisma.user.findUnique({

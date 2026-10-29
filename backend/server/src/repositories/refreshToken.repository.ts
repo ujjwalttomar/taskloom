@@ -1,4 +1,4 @@
-import prisma from "../../../../shared/db/client";
+import prisma from "../../../shared/db/client";
 
 export const createRefreshToken = (data: { token: string; userId: number; expiresAt: Date }) =>
     prisma.refreshToken.create({ data });

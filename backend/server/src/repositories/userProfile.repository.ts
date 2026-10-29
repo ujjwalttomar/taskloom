@@ -1,4 +1,4 @@
-import prisma from "../../../../shared/db/client";
+import prisma from "../../../shared/db/client";
 
 // Get a user's board membership + their role in the board
 export const findBoardMember = (boardId: number, userId: number) =>

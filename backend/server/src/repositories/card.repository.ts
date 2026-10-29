@@ -1,4 +1,4 @@
-import prisma from "../../../../shared/db/client";
+import prisma from "../../../shared/db/client";
 
 export const findAllCards = (listId: number) =>
     prisma.card.findMany({ where: { listId }, orderBy: { order: "asc" } });
