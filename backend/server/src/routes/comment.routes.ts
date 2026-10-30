@@ -1,9 +1,10 @@
+
 import express from "express";
-import { getAllComments, createComment, editComment, deleteComment } from "../controllers/comment.controller";
+import {getAllComments, createComment, editComment, deleteComment} from "../controllers/comment.controller";
 import { authenticate } from "../middlewares/auth.middleware";
-import { isBoardMember } from "../middlewares/board.middleware";
-import { resolveBoardFromCard } from "../middlewares/card.middleware";
-import { resolveBoardFromComment } from "../middlewares/comment.middleware";
+import { resolveBoardFromCard} from "../middlewares/card.middleware";
+import { resolveBoardFromComment } from "../middlewares/comment.middleware"
+import {isBoardMember} from "../middlewares/board.middleware";
 
 const router = express.Router();
 

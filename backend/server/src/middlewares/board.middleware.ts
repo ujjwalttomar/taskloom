@@ -1,27 +1,26 @@
-import { Request, Response, NextFunction } from "express";
+
+import { Request, Response, NextFunction } from "express-serve-static-core";
 import prisma from "../../../shared/db/client";
+import { AppError } from "../utils/AppError";
 
 export const isBoardMember = async (req: Request, res: Response, next: NextFunction) => {
-    const boardId = parseInt(req.params.boardId as string);
-    const userId = req.userId!;
+    try {
+        const boardId = parseInt(req.params.boardId as string);
+        if (isNaN(boardId)) throw new AppError(400, "Invalid board ID");
 
-    const membership = await prisma.boardMember.findUnique({
-        where: { boardId_memberId: { boardId, memberId: userId } },
-    });
+        const boardMembership = await prisma.boardMember.findUnique({
+            where: { boardId_memberId: { boardId, memberId: req.userId! } }
+        });
+        if (!boardMembership) throw new AppError(403, "Not a board member");
 
-    if (!membership) {
-        res.status(403).json({ error: "Not a member!" });
-        return;
+        req.boardMembership = boardMembership;
+        next();
+    } catch (error) {
+        next(error);
     }
-
-    req.boardMembership = membership;
-    next();
 };
 
 export const isBoardAdmin = (req: Request, res: Response, next: NextFunction) => {
-    if (req.boardMembership?.role !== "ADMIN") {
-        res.status(403).json({ error: "Not a board admin!" });
-        return;
-    }
+    if (req.boardMembership!.role !== "ADMIN") return next(new AppError(403, "Board admin only"));
     next();
 };

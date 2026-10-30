@@ -1,114 +1,130 @@
-import { Request, Response } from "express";
-import {
-    CreateWorkspaceSchema,
-    EditWorkspaceSchema,
-    AddWorkspaceMemberSchema,
-    UpdateWorkspaceMemberRoleSchema,
-} from "../schemas/workspace.schemas";
-import * as workspaceService from "../services/workspace.service";
+
+import { Request, Response, NextFunction } from "express";
+import prisma from "../../../shared/db/client";
+import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
 
-function handleError(res: Response, error: unknown) {
-    if (error instanceof AppError) return res.status(error.statusCode).json({ message: error.message });
-    return res.status(500).json({ message: "Server error" });
-}
+export const getAllWorkspaces = asyncHandler(async (req, res) => {
+    const userId = req.userId!;
 
-function firstIssue(err: { issues: { message: string }[] }) {
-    return err.issues[0]?.message ?? "Validation error";
-}
+    const workspaces = await prisma.workspace.findMany({
+        where: { members: { some: { memberId: userId } } }
+    });
 
-export const getAllWorkspaces = async (req: Request, res: Response) => {
-    try {
-        const workspaces = await workspaceService.getAllWorkspaces(req.userId!);
-        return res.status(200).json({ workspaces });
-    } catch (error) {
-        return handleError(res, error);
+    return res.status(200).json({ workspaces });
+});
+
+
+export const getSpecificWorkspace = asyncHandler(async (req, res) => {
+    const workspaceId = parseInt(req.params.workspaceId as string);
+
+    const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        include: { boards: true, members: { include: { user: true } } }
+    });
+
+    if (!workspace) throw new AppError(404, "Workspace not found");
+
+    return res.status(200).json({ workspace });
+});
+
+
+export const createWorkspace = asyncHandler(async (req, res) => {
+    const { name, description } = req.body;
+    const userId = req.userId!;
+
+    if (!name) throw new AppError(400, "Workspace name is required");
+
+    const workspace = await prisma.workspace.create({
+        data: {
+            name,
+            description,
+            members: { create: { memberId: userId, role: "ADMIN" } },
+        },
+    });
+
+    return res.status(201).json({ message: "Workspace created", workspace });
+});
+
+
+export const editWorkspace = asyncHandler(async (req, res) => {
+    const { name, description } = req.body;
+    const workspaceId = parseInt(req.params.workspaceId as string);
+
+    const workspace = await prisma.workspace.update({
+        where: { id: workspaceId },
+        data: { name, description },
+    });
+
+    return res.status(200).json({ workspace });
+});
+
+
+export const deleteWorkspace = asyncHandler(async (req, res) => {
+    const workspaceId = parseInt(req.params.workspaceId as string);
+
+    await prisma.workspace.delete({ where: { id: workspaceId } });
+
+    return res.status(200).json({ message: "Workspace deleted" });
+});
+
+
+export const addMembers = asyncHandler(async (req, res) => {
+    const workspaceId = parseInt(req.params.workspaceId as string);
+    const { email, role } = req.body;
+    const memberRole = role === "ADMIN" ? "ADMIN" : "EMPLOYEE";
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) throw new AppError(404, "User not found");
+
+    const existing = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_memberId: { workspaceId, memberId: user.id } }
+    });
+    if (existing) throw new AppError(409, "Already a member");
+
+    const member = await prisma.workspaceMember.create({
+        data: { workspaceId, memberId: user.id, role: memberRole }
+    });
+
+    return res.status(201).json({ message: "Member added", member });
+});
+
+
+export const updateMemberRole = asyncHandler(async (req, res) => {
+    const workspaceId = parseInt(req.params.workspaceId as string);
+    const memberId = parseInt(req.params.memberId as string);
+    const { role } = req.body;
+
+    if (role !== "ADMIN" && role !== "EMPLOYEE") throw new AppError(400, "Invalid role");
+
+    if (role === "EMPLOYEE") {
+        const adminCount = await prisma.workspaceMember.count({ where: { workspaceId, role: "ADMIN" } });
+        if (adminCount <= 1 && memberId === req.userId) {
+            throw new AppError(400, "Cannot demote the last admin");
+        }
     }
-};
 
-export const getSpecificWorkspace = async (req: Request, res: Response) => {
-    try {
-        const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const workspace = await workspaceService.getWorkspace(workspaceId);
-        return res.status(200).json({ workspace });
-    } catch (error) {
-        return handleError(res, error);
+    const updated = await prisma.workspaceMember.update({
+        where: { workspaceId_memberId: { workspaceId, memberId } },
+        data: { role },
+    });
+
+    return res.status(200).json({ message: "Role updated", member: updated });
+});
+
+
+export const deleteMember = asyncHandler(async (req, res) => {
+    const memberId = parseInt(req.params.memberId as string);
+    const workspaceId = parseInt(req.params.workspaceId as string);
+
+    if (memberId === req.userId) {
+        const adminCount = await prisma.workspaceMember.count({ where: { workspaceId, role: "ADMIN" } });
+        if (adminCount <= 1) throw new AppError(400, "Cannot remove the last admin");
     }
-};
 
-export const createWorkspace = async (req: Request, res: Response) => {
-    try {
-        const parsed = CreateWorkspaceSchema.safeParse({ body: req.body });
-        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
+    await prisma.workspaceMember.delete({
+        where: { workspaceId_memberId: { workspaceId, memberId } }
+    });
 
-        const { name, description } = parsed.data.body;
-        const workspace = await workspaceService.createWorkspace(req.userId!, name, description);
-        return res.status(201).json({ message: "workspace created", workspace });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const editWorkspace = async (req: Request, res: Response) => {
-    try {
-        const parsed = EditWorkspaceSchema.safeParse({ body: req.body });
-        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
-
-        const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const workspace = await workspaceService.editWorkspace(workspaceId, parsed.data.body);
-        return res.status(200).json({ workspace });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const deleteWorkspace = async (req: Request, res: Response) => {
-    try {
-        const workspaceId = parseInt(req.params["workspaceId"] as string);
-        await workspaceService.deleteWorkspace(workspaceId);
-        return res.status(200).json({ message: "Workspace deleted" });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const addMembers = async (req: Request, res: Response) => {
-    try {
-        const parsed = AddWorkspaceMemberSchema.safeParse({ body: req.body });
-        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
-
-        const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const { email, role } = parsed.data.body;
-        const memberRole = role === "ADMIN" ? "ADMIN" : "EMPLOYEE";
-        const member = await workspaceService.addMember(workspaceId, email, memberRole);
-        return res.status(201).json({ message: "Member added", member });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const updateMemberRole = async (req: Request, res: Response) => {
-    try {
-        const parsed = UpdateWorkspaceMemberRoleSchema.safeParse({ body: req.body });
-        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
-
-        const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const memberId = parseInt(req.params["memberId"] as string);
-        const { role } = parsed.data.body;
-        const updated = await workspaceService.updateMemberRole(workspaceId, memberId, role);
-        return res.status(200).json({ message: "Role updated", member: updated });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const deleteMember = async (req: Request, res: Response) => {
-    try {
-        const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const memberId = parseInt(req.params["memberId"] as string);
-        await workspaceService.deleteMember(workspaceId, memberId, req.userId!);
-        return res.status(200).json({ message: "Member removed", memberId });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
+    return res.status(200).json({ message: "Member removed" });
+});

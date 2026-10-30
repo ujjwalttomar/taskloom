@@ -1,116 +1,171 @@
-import { Request, Response } from "express";
-import {
-    CreateBoardSchema,
-    EditBoardSchema,
-    AddBoardMemberSchema,
-    UpdateBoardMemberRoleSchema,
-} from "../schemas/board.schemas";
-import * as boardService from "../services/board.service";
+
+import { Request, Response, NextFunction } from "express";
+import prisma from "../../../shared/db/client";
+import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
+import { publishBoardEvent } from "../redis";
 
-function handleError(res: Response, error: unknown) {
-    if (error instanceof AppError) return res.status(error.statusCode).json({ message: error.message });
-    return res.status(500).json({ message: "Server error" });
-}
+export const getAllBoards = asyncHandler(async (req, res) => {
+    const workspaceId = parseInt(req.params.workspaceId as string);
+    const userId = req.userId!;
 
-function firstIssue(err: { issues: { message: string }[] }) {
-    return err.issues[0]?.message ?? "Validation error";
-}
+    const boards = await prisma.board.findMany({
+        where: {
+            workspaceId,
+            members: { some: { memberId: userId } }
+        }
+    });
 
-export const getAllBoards = async (req: Request, res: Response) => {
-    try {
-        const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const boards = await boardService.getAllBoards(workspaceId, req.userId!);
-        return res.status(200).json({ boards });
-    } catch (error) {
-        return handleError(res, error);
+    return res.status(200).json({ boards });
+});
+
+
+export const createBoard = asyncHandler(async (req, res) => {
+    const workspaceId = parseInt(req.params.workspaceId as string);
+    const userId = req.userId!;
+    const { title, description } = req.body;
+
+    if (!title) throw new AppError(400, "Board title is required");
+
+    const board = await prisma.board.create({
+        data: {
+            title,
+            description,
+            workspaceId,
+            members: {
+                create: { memberId: userId, role: "ADMIN" }
+            }
+        }
+    });
+
+    return res.status(201).json({ message: "Board created", board });
+});
+
+
+export const getSpecificBoard = asyncHandler(async (req, res) => {
+    const boardId = parseInt(req.params.boardId as string);
+
+    const board = await prisma.board.findUnique({
+        where: { id: boardId },
+        include: {
+            lists: {
+                orderBy: { order: "asc" },
+                include: {
+                    cards: { orderBy: { order: "asc" } }
+                }
+            },
+            members: { include: { user: true } }
+        }
+    });
+
+    if (!board) throw new AppError(404, "Board not found");
+
+    return res.status(200).json({ board });
+});
+
+
+export const editBoard = asyncHandler(async (req, res) => {
+    const boardId = parseInt(req.params.boardId as string);
+    const { title, description } = req.body;
+
+    const board = await prisma.board.update({
+        where: { id: boardId },
+        data: { title, description }
+    });
+
+    publishBoardEvent(boardId, req.userId!, { type: "board_edited", board });
+
+    return res.status(200).json({ board });
+});
+
+
+export const deleteBoard = asyncHandler(async (req, res) => {
+    const boardId = parseInt(req.params.boardId as string);
+
+    await prisma.board.delete({ where: { id: boardId } });
+
+    publishBoardEvent(boardId, req.userId!, { type: "board_deleted", boardId });
+
+    return res.status(200).json({ message: "Board deleted", boardId });
+});
+
+
+export const addMember = asyncHandler(async (req, res) => {
+    const boardId = parseInt(req.params.boardId as string);
+    const { email, role } = req.body;
+    const memberRole = role === "ADMIN" ? "ADMIN" : "EMPLOYEE";
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) throw new AppError(404, "User not found");
+
+    const board = await prisma.board.findUnique({ where: { id: boardId } });
+    if (!board) throw new AppError(404, "Board not found");
+
+    const workspaceMembership = await prisma.workspaceMember.findUnique({
+        where: {
+            workspaceId_memberId: {
+                workspaceId: board.workspaceId,
+                memberId: user.id
+            }
+        }
+    });
+    if (!workspaceMembership) throw new AppError(403, "User is not a workspace member");
+
+    const existing = await prisma.boardMember.findUnique({
+        where: { boardId_memberId: { boardId, memberId: user.id } }
+    });
+    if (existing) throw new AppError(409, "Already a board member");
+
+    const member = await prisma.boardMember.create({
+        data: { boardId, memberId: user.id, role: memberRole },
+        include: { user: true },
+    });
+
+    publishBoardEvent(boardId, req.userId!, { type: "member_added", member });
+
+    return res.status(201).json({ message: "Member added", member });
+});
+
+
+export const updateBoardMemberRole = asyncHandler(async (req, res) => {
+    const boardId = parseInt(req.params.boardId as string);
+    const memberId = parseInt(req.params.memberId as string);
+    const { role } = req.body;
+
+    if (role !== "ADMIN" && role !== "EMPLOYEE") throw new AppError(400, "Invalid role");
+
+    if (role === "EMPLOYEE") {
+        const adminCount = await prisma.boardMember.count({ where: { boardId, role: "ADMIN" } });
+        if (adminCount <= 1 && memberId === req.userId) {
+            throw new AppError(400, "Cannot demote the last admin");
+        }
     }
-};
 
-export const createBoard = async (req: Request, res: Response) => {
-    try {
-        const parsed = CreateBoardSchema.safeParse({ body: req.body });
-        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
+    const updated = await prisma.boardMember.update({
+        where: { boardId_memberId: { boardId, memberId } },
+        data: { role },
+    });
 
-        const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const { title, description } = parsed.data.body;
-        const board = await boardService.createBoard(workspaceId, req.userId!, title, description);
-        return res.status(201).json({ message: "Board created", board });
-    } catch (error) {
-        return handleError(res, error);
+    publishBoardEvent(boardId, req.userId!, { type: "member_role_updated", member: updated });
+
+    return res.status(200).json({ message: "Role updated", member: updated });
+});
+
+
+export const deleteMember = asyncHandler(async (req, res) => {
+    const boardId = parseInt(req.params.boardId as string);
+    const memberId = parseInt(req.params.memberId as string);
+
+    if (memberId === req.userId) {
+        const adminCount = await prisma.boardMember.count({ where: { boardId, role: "ADMIN" } });
+        if (adminCount <= 1) throw new AppError(400, "Cannot remove the last admin");
     }
-};
 
-export const getSpecificBoard = async (req: Request, res: Response) => {
-    try {
-        const boardId = parseInt(req.params["boardId"] as string);
-        const board = await boardService.getBoard(boardId);
-        return res.status(200).json({ board });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
+    await prisma.boardMember.delete({
+        where: { boardId_memberId: { boardId, memberId } }
+    });
 
-export const editBoard = async (req: Request, res: Response) => {
-    try {
-        const parsed = EditBoardSchema.safeParse({ body: req.body });
-        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
+    publishBoardEvent(boardId, req.userId!, { type: "member_removed", memberId });
 
-        const boardId = parseInt(req.params["boardId"] as string);
-        const board = await boardService.editBoard(boardId, req.userId!, parsed.data.body);
-        return res.status(200).json({ board });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const deleteBoard = async (req: Request, res: Response) => {
-    try {
-        const boardId = parseInt(req.params["boardId"] as string);
-        await boardService.deleteBoard(boardId, req.userId!);
-        return res.status(200).json({ message: "Board deleted", boardId });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const addMember = async (req: Request, res: Response) => {
-    try {
-        const parsed = AddBoardMemberSchema.safeParse({ body: req.body });
-        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
-
-        const boardId = parseInt(req.params["boardId"] as string);
-        const { email, role } = parsed.data.body;
-        const memberRole = role === "ADMIN" ? "ADMIN" : "EMPLOYEE";
-        const member = await boardService.addMember(boardId, req.userId!, email, memberRole);
-        return res.status(201).json({ message: "Member added", member });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const updateBoardMemberRole = async (req: Request, res: Response) => {
-    try {
-        const parsed = UpdateBoardMemberRoleSchema.safeParse({ body: req.body });
-        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
-
-        const boardId = parseInt(req.params["boardId"] as string);
-        const memberId = parseInt(req.params["memberId"] as string);
-        const { role } = parsed.data.body;
-        const updated = await boardService.updateBoardMemberRole(boardId, memberId, req.userId!, role);
-        return res.status(200).json({ message: "Role updated", member: updated });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const deleteMember = async (req: Request, res: Response) => {
-    try {
-        const boardId = parseInt(req.params["boardId"] as string);
-        const memberId = parseInt(req.params["memberId"] as string);
-        await boardService.deleteBoardMember(boardId, memberId, req.userId!);
-        return res.status(200).json({ message: "Member removed", memberId });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
+    return res.status(200).json({ message: "Member removed", memberId });
+});

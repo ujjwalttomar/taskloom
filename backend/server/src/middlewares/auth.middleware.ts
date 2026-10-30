@@ -1,43 +1,42 @@
-import { Request, Response, NextFunction } from "express";
+
 import { verifyAccessToken } from "../../../shared/auth/token";
+import { Request, Response, NextFunction } from "express";
 import prisma from "../../../shared/db/client";
+import { AppError } from "../utils/AppError";
 
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
-    const token = req.cookies["accessToken"];
-    if (!token) {
-        res.status(401).json({ message: "token missing!" });
-        return;
-    }
     try {
+        const token = req.cookies.accessToken;
+        if (!token) throw new AppError(401, "Authentication required");
+
         const decoded = verifyAccessToken(token);
         req.userId = decoded.userId;
         next();
-    } catch {
-        res.status(401).json({ message: "Invalid or expired token" });
+    } catch (error) {
+        // verifyAccessToken throws on invalid/expired — forward as 401
+        if (error instanceof AppError) return next(error);
+        return next(new AppError(401, "Invalid or expired token"));
     }
 };
 
 export const isMember = async (req: Request, res: Response, next: NextFunction) => {
-    const workspaceId = parseInt(req.params.workspaceId as string);
-    const userId = req.userId!;
+    try {
+        const workspaceId = parseInt(req.params.workspaceId as string);
+        if (isNaN(workspaceId)) throw new AppError(400, "Invalid workspace ID");
 
-    const membership = await prisma.workspaceMember.findUnique({
-        where: { workspaceId_memberId: { workspaceId, memberId: userId } },
-    });
+        const membership = await prisma.workspaceMember.findUnique({
+            where: { workspaceId_memberId: { workspaceId, memberId: req.userId! } }
+        });
+        if (!membership) throw new AppError(403, "Not a workspace member");
 
-    if (!membership) {
-        res.status(403).json({ error: "Not a member!" });
-        return;
+        req.membership = membership;
+        next();
+    } catch (error) {
+        next(error);
     }
-
-    req.membership = membership;
-    next();
 };
 
 export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
-    if (req.membership?.role !== "ADMIN") {
-        res.status(403).json({ error: "Not an admin!" });
-        return;
-    }
+    if (req.membership!.role !== "ADMIN") return next(new AppError(403, "Admin only"));
     next();
 };

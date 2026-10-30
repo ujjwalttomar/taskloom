@@ -1,7 +1,8 @@
+
 import express from "express";
-import { authenticate, isAdmin, isMember } from "../middlewares/auth.middleware";
-import { getAllWorkspaces, getSpecificWorkspace, editWorkspace, createWorkspace, deleteWorkspace, addMembers, deleteMember, updateMemberRole } from "../controllers/workspace.controller";
-import { getWorkspaceProfile } from "../controllers/userProfile.controller";
+import { authenticate, isAdmin, isMember} from "../middlewares/auth.middleware";
+import { getAllWorkspaces, getSpecificWorkspace, editWorkspace, createWorkspace, deleteWorkspace, addMembers
+        , deleteMember,updateMemberRole} from "../controllers/workspace.controller";
 
 const router = express.Router();
 
@@ -13,6 +14,6 @@ router.delete("/workspaces/:workspaceId", authenticate, isMember, isAdmin, delet
 router.post("/workspaces/:workspaceId/members", authenticate, isMember, isAdmin, addMembers);
 router.patch("/workspaces/:workspaceId/members/:memberId", authenticate, isMember, isAdmin, updateMemberRole);
 router.delete("/workspaces/:workspaceId/members/:memberId", authenticate, isMember, isAdmin, deleteMember);
-router.get("/workspaces/:workspaceId/members/:memberId/profile", authenticate, getWorkspaceProfile);
 
 export default router;
+

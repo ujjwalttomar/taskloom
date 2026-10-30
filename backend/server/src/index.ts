@@ -11,6 +11,8 @@ import cardRouter from "./routes/card.routes";
 import listRouter from "./routes/list.routes";
 import workspaceRouter from "./routes/workspace.routes";
 import inviteRouter from "./routes/invite.routes";
+import { errorHandler } from "./middlewares/errorHandler";
+import { AppError } from "./utils/AppError";
 
 dotenv.config();
 
@@ -20,10 +22,11 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-    origin : process.env.FRONTEND_URL || "http://localhost:5173",
-    credentials : true
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true
 }));
 
+// ── Routes ───────────────────────────────────────────────────────────────────
 app.use("/auth", authRouter);
 app.use("/api", boardRouter);
 app.use("/api", commentRouter);
@@ -32,9 +35,9 @@ app.use("/api", listRouter);
 app.use("/api", workspaceRouter);
 app.use("/api", inviteRouter);
 
-
-app.get("/health", (req, res)=>{
-    res.status(200).json({status : "ok"});
+// ── Health checks ────────────────────────────────────────────────────────────
+app.get("/health", (_req, res) => {
+    res.status(200).json({ status: "ok" });
 });
 
 app.get("/health/db", async (_req, res) => {
@@ -46,7 +49,14 @@ app.get("/health/db", async (_req, res) => {
     }
 });
 
+// ── 404 catch-all ────────────────────────────────────────────────────────────
+app.use((req, _res, next) => {
+    next(new AppError(404, `Cannot ${req.method} ${req.path}`));
+});
 
-app.listen(PORT, ()=>{
-    console.log(`servers is running at${PORT}`);
+// ── Central error handler (must be last) ─────────────────────────────────────
+app.use(errorHandler);
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
