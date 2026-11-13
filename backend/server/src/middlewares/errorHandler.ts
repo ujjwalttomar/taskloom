@@ -1,6 +1,6 @@
 
 import { Request, Response, NextFunction } from "express";
-import { Prisma } from "../../../../shared/db/generated/prisma/client";
+import { Prisma } from "../../../shared/db/generated/prisma/client";
 import { AppError } from "../utils/AppError";
 import { ZodError } from "zod";
 

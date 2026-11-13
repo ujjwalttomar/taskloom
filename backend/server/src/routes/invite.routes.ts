@@ -2,15 +2,17 @@ import express from "express";
 import { sendInvite, getInviteDetails, acceptInvite } from "../controllers/invite.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { isMember, isAdmin } from "../middlewares/auth.middleware";
+import { inviteLimiter } from "../middlewares/rateLimiter";
 
 const router = express.Router();
 
-// send invite — workspace admin only
+// send invite — workspace admin only + invite rate limit (10 / hour)
 router.post(
     "/workspaces/:workspaceId/invites",
     authenticate,
     isMember,
     isAdmin,
+    inviteLimiter,
     sendInvite
 );
 
