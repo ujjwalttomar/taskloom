@@ -113,7 +113,7 @@ export function InvitePage() {
                                     Sign in to accept
                                 </button>
                             </div>
-                        ) : user.email !== details.email ? (
+                        ) : user.email.toLowerCase() !== details.email.toLowerCase() ? (
                             <div className="text-center">
                                 <p className="text-red-400 text-sm mb-2">
                                     This invite was sent to <strong>{details.email}</strong>.

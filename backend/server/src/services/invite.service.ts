@@ -70,7 +70,7 @@ export async function acceptInvite(token: string, userId: number) {
     const fullUser = await userRepo.findUserByIdFull(userId);
     if (!fullUser) throw new AppError(404, "User not found");
 
-    if (fullUser.email !== invite.email) {
+    if (fullUser.email.toLowerCase() !== invite.email.toLowerCase()) {
         throw new AppError(403, `This invite was sent to ${invite.email}. You're logged in as ${fullUser.email}.`);
     }
 

@@ -54,10 +54,11 @@ export async function handleGoogleLogin(code: string): Promise<AuthTokens> {
         throw new AppError(403, "Google email address is not verified");
     }
 
-    let user = await userRepo.findUserByEmail(googleUser.email);
+    const email = googleUser.email.trim().toLowerCase();
+    let user = await userRepo.findUserByEmail(email);
     if (!user) {
         user = await userRepo.createUser({
-            email: googleUser.email,
+            email,
             name: googleUser.name,
             googleId: googleUser.sub,
         });
@@ -77,7 +78,9 @@ export async function handleGoogleLogin(code: string): Promise<AuthTokens> {
 
 export async function refreshAccessToken(refreshToken: string): Promise<string> {
     const storedToken = await tokenRepo.findRefreshToken(refreshToken);
-    if (!storedToken || storedToken.expiresAt < new Date()) {
+    if (!storedToken) throw new AppError(401, "Refresh token expired or invalid");
+    if (storedToken.expiresAt < new Date()) {
+        await tokenRepo.deleteRefreshToken(refreshToken); // otherwise expired rows pile up forever
         throw new AppError(401, "Refresh token expired or invalid");
     }
     return signAccessToken(storedToken.userId);
