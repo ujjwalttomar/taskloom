@@ -3,6 +3,7 @@ import { GoogleCallbackSchema } from "../schemas/auth.schemas";
 import * as authService from "../services/auth.service";
 import { AppError } from "../utils/AppError";
 import { handleError } from "../utils/handleError";
+import { signWsTicket } from "../../../shared/auth/token";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -73,4 +74,10 @@ export const logoutUser = async (req: Request, res: Response) => {
     } catch (error) {
         handleError(res, error);
     }
+};
+
+// GET /auth/ws-ticket — a 60-second token the browser passes to the WebSocket server.
+// Needed because the auth cookie belongs to this host and is never sent to the WS host.
+export const getWsTicket = (req: Request, res: Response) => {
+    res.status(200).json({ ticket: signWsTicket(req.userId!) });
 };

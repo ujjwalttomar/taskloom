@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { TokenPayload, ACCESS_TOKEN_EXPIRY } from "./types.js";
+import { TokenPayload, ACCESS_TOKEN_EXPIRY, WS_TICKET_EXPIRY } from "./types.js";
 import crypto from "crypto";
 
 function getSecret(): string {
@@ -21,5 +21,22 @@ export function generateRefreshToken(): string {
 }
 
 export function verifyAccessToken(token: string): TokenPayload {
-    return jwt.verify(token, getSecret()) as TokenPayload;
+    const payload = jwt.verify(token, getSecret()) as TokenPayload & { purpose?: string };
+    if (payload.purpose) throw new Error("Not an access token");
+    return payload;
+}
+
+/**
+ * Short-lived ticket for opening a WebSocket. The browser fetches it from the REST API
+ * (where the auth cookie lives) and passes it in the WS URL, because the cookie is
+ * host-only and never reaches the separately hosted WebSocket server.
+ */
+export function signWsTicket(userId: number): string {
+    return jwt.sign({ userId, purpose: "ws" }, getSecret(), { expiresIn: WS_TICKET_EXPIRY });
+}
+
+export function verifyWsTicket(ticket: string): TokenPayload {
+    const payload = jwt.verify(ticket, getSecret()) as TokenPayload & { purpose?: string };
+    if (payload.purpose !== "ws") throw new Error("Not a ws ticket");
+    return payload;
 }

@@ -3,7 +3,8 @@
     "version": "1.0.0",
     "scripts": {
         "dev": "tsx watch src/server.ts",
-        "start": "tsx src/server.ts"
+        "start": "tsx src/server.ts",
+        "build": "cd ../shared/auth && npm install && cd ../db && npm install && npx prisma generate"
     },
     "dependencies": {
         "dotenv": "^18.0.1",
