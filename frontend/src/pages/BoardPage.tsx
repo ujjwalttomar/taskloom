@@ -78,14 +78,20 @@ export function BoardPage() {
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
     );
 
-    useEffect(() => {
-        setLoading(true);
-        api.boards.getOne(boardId).then((data) => {
+    // Loads (or reloads) the whole board. Also used to resync after a WebSocket reconnect,
+    // because events sent while we were disconnected are gone for good.
+    const loadBoard = useCallback(() => {
+        return api.boards.getOne(boardId).then((data) => {
             setBoard(data.board);
             setLists(data.board.lists ?? []);
             setLoading(false);
         }).catch(() => navigate("/dashboard"));
     }, [boardId, navigate]);
+
+    useEffect(() => {
+        setLoading(true);
+        loadBoard();
+    }, [loadBoard]);
 
     const handleWsEvent = useCallback((event: WsEvent) => {
         switch (event.type) {
@@ -156,7 +162,7 @@ export function BoardPage() {
         }
     }, [navigate]);
 
-    useWebSocket(boardId, handleWsEvent);
+    const wsStatus = useWebSocket(boardId, handleWsEvent, { onReconnect: loadBoard });
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -481,6 +487,14 @@ export function BoardPage() {
                 </div>
 
                 <div className="ml-auto flex items-center gap-3">
+                    {/* Live-updates status: tells the user when changes from others aren't arriving */}
+                    {wsStatus !== "live" && (
+                        <span className="flex items-center gap-1.5 text-xs text-amber-400" title="Live updates paused — reconnecting">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            {wsStatus === "connecting" ? "Connecting…" : "Reconnecting…"}
+                        </span>
+                    )}
+
                     {/* Members avatars */}
                     <div className="flex items-center">
                         {(board?.members ?? []).slice(0, 5).map((m, i) => (

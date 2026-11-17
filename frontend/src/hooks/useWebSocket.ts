@@ -1,78 +1,124 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
+import { api } from "../api/client";
 import type { WsEvent } from "../types";
 
 const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:3001";
+const MAX_DELAY_MS = 30_000;
 
-const MAX_RETRIES = 5;
+export type WsStatus = "connecting" | "live" | "reconnecting";
 
-export function useWebSocket(boardId: number | null, onEvent: (event: WsEvent) => void) {
+interface Options {
+    /** Called after every successful RE-connect, so the page can refetch what it missed. */
+    onReconnect?: () => void;
+}
+
+/**
+ * One WebSocket per board page.
+ * - Authenticates with a short-lived ticket from the REST API (the auth cookie is host-only
+ *   and never reaches the WS server's host in production).
+ * - Keeps retrying with backoff capped at 30s instead of giving up (a sleeping Render
+ *   instance takes longer than the old 5-try budget to wake up).
+ * - Reconnects immediately when the tab becomes visible again or the network comes back.
+ */
+export function useWebSocket(boardId: number | null, onEvent: (event: WsEvent) => void, options: Options = {}) {
+    const [status, setStatus] = useState<WsStatus>("connecting");
     const wsRef = useRef<WebSocket | null>(null);
-    const boardIdRef = useRef<number | null>(null);
-    const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const retryCount = useRef(0);
+    const boardIdRef = useRef<number | null>(boardId);
     const onEventRef = useRef(onEvent);
-    onEventRef.current = onEvent;
+    const onReconnectRef = useRef(options.onReconnect);
 
-    const connect = useCallback(() => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    // Keep the latest callbacks without reconnecting when they change
+    useEffect(() => {
+        onEventRef.current = onEvent;
+        onReconnectRef.current = options.onReconnect;
+    });
 
-        const ws = new WebSocket(WS_URL);
-        wsRef.current = ws;
+    useEffect(() => {
+        let stopped = false;
+        let connecting = false;
+        let hasConnectedBefore = false;
+        let retry = 0;
+        let timer: ReturnType<typeof setTimeout> | null = null;
 
-        ws.onopen = () => {
-            retryCount.current = 0; // reset on successful connection
-            if (boardIdRef.current !== null) {
-                ws.send(JSON.stringify({ type: "join", boardId: boardIdRef.current }));
-            }
+        const scheduleReconnect = () => {
+            if (stopped) return;
+            setStatus("reconnecting");
+            const delay = Math.min(1000 * 2 ** retry, MAX_DELAY_MS);
+            retry++;
+            timer = setTimeout(connect, delay);
         };
 
-        ws.onmessage = (event) => {
+        async function connect() {
+            const state = wsRef.current?.readyState;
+            if (stopped || connecting || state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
+            connecting = true;
+            if (timer) clearTimeout(timer);
+
+            let ticket: string;
             try {
-                const data = JSON.parse(event.data) as WsEvent;
-                onEventRef.current(data);
+                // Also refreshes an expired access token on the way (api client handles 401 → refresh)
+                ticket = (await api.auth.wsTicket()).ticket;
             } catch {
-                // ignore malformed messages
-            }
-        };
-
-        ws.onclose = () => {
-            if (retryCount.current >= MAX_RETRIES) {
-                // Give up — WS server is likely sleeping (Render free tier)
-                // Real-time updates will be unavailable; app still works normally
+                connecting = false;
+                scheduleReconnect();
                 return;
             }
-            const delay = Math.min(1000 * 2 ** retryCount.current, 30000);
-            retryCount.current++;
-            reconnectTimer.current = setTimeout(connect, delay);
-        };
+            if (stopped) return;
 
-        ws.onerror = () => {
-            ws.close();
+            const ws = new WebSocket(`${WS_URL}?ticket=${encodeURIComponent(ticket)}`);
+            wsRef.current = ws;
+            connecting = false;
+
+            ws.onopen = () => {
+                retry = 0;
+                setStatus("live");
+                if (boardIdRef.current !== null) {
+                    ws.send(JSON.stringify({ type: "join", boardId: boardIdRef.current }));
+                }
+                if (hasConnectedBefore) onReconnectRef.current?.(); // resync events missed while offline
+                hasConnectedBefore = true;
+            };
+            ws.onmessage = (event) => {
+                try {
+                    onEventRef.current(JSON.parse(event.data) as WsEvent);
+                } catch {
+                    // ignore malformed messages
+                }
+            };
+            ws.onclose = () => scheduleReconnect();
+            ws.onerror = () => ws.close();
+        }
+
+        // Back on the tab / back online → try right away instead of waiting out the backoff
+        const reconnectNow = () => {
+            if (document.visibilityState !== "visible") return;
+            retry = 0;
+            void connect();
+        };
+        document.addEventListener("visibilitychange", reconnectNow);
+        window.addEventListener("online", reconnectNow);
+
+        void connect();
+        return () => {
+            stopped = true;
+            if (timer) clearTimeout(timer);
+            document.removeEventListener("visibilitychange", reconnectNow);
+            window.removeEventListener("online", reconnectNow);
+            if (wsRef.current) {
+                wsRef.current.onclose = null; // intentional close: don't reconnect
+                wsRef.current.close();
+                wsRef.current = null;
+            }
         };
     }, []);
 
-    // Connect on mount
-    useEffect(() => {
-        connect();
-        return () => {
-            if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-            if (wsRef.current) {
-                wsRef.current.onclose = null; // prevent reconnect on intentional close
-                wsRef.current.close();
-            }
-        };
-    }, [connect]);
-
-    // Join/leave room when boardId changes
+    // Join/leave a room when the board changes
     useEffect(() => {
         boardIdRef.current = boardId;
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-        if (boardId !== null) {
-            ws.send(JSON.stringify({ type: "join", boardId }));
-        } else {
-            ws.send(JSON.stringify({ type: "leave" }));
-        }
+        ws.send(JSON.stringify(boardId !== null ? { type: "join", boardId } : { type: "leave" }));
     }, [boardId]);
+
+    return status;
 }
