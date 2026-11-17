@@ -41,9 +41,22 @@ export const updateWorkspaceMemberRole = (workspaceId: number, memberId: number,
         data: { role },
     });
 
-export const deleteWorkspaceMember = (workspaceId: number, memberId: number) =>
-    prisma.workspaceMember.delete({
-        where: { workspaceId_memberId: { workspaceId, memberId } },
+/**
+ * Removes a user from a workspace AND from every board / card assignment inside it,
+ * in one transaction. Board access is checked only via BoardMember, so leaving those
+ * rows behind would let a removed user keep using the boards.
+ * Returns the ids of the boards they were removed from.
+ */
+export const removeMemberFromWorkspace = (workspaceId: number, memberId: number) =>
+    prisma.$transaction(async (tx) => {
+        const boards = await tx.boardMember.findMany({
+            where: { memberId, board: { workspaceId } },
+            select: { boardId: true },
+        });
+        await tx.assignedCard.deleteMany({ where: { userId: memberId, card: { list: { board: { workspaceId } } } } });
+        await tx.boardMember.deleteMany({ where: { memberId, board: { workspaceId } } });
+        await tx.workspaceMember.delete({ where: { workspaceId_memberId: { workspaceId, memberId } } });
+        return boards.map((b) => b.boardId);
     });
 
 export const countWorkspaceAdmins = (workspaceId: number) =>

@@ -1,6 +1,7 @@
 import * as repo from "../repositories/workspace.repository";
 import * as userRepo from "../repositories/user.repository";
 import { AppError } from "../utils/AppError";
+import { publishBoardEvent } from "../redis";
 
 export async function getAllWorkspaces(userId: number) {
     return repo.findAllWorkspacesForUser(userId);
@@ -34,18 +35,28 @@ export async function addMember(workspaceId: number, email: string, role: "ADMIN
     return repo.createWorkspaceMember(workspaceId, user.id, role);
 }
 
+/** Throws if this change would leave the workspace with no admin at all. */
+async function assertNotLastAdmin(workspaceId: number, target: { role: string }, message: string) {
+    if (target.role !== "ADMIN") return;
+    const adminCount = await repo.countWorkspaceAdmins(workspaceId);
+    if (adminCount <= 1) throw new AppError(400, message);
+}
+
 export async function updateMemberRole(workspaceId: number, memberId: number, role: "ADMIN" | "EMPLOYEE") {
-    if (role === "EMPLOYEE") {
-        const adminCount = await repo.countWorkspaceAdmins(workspaceId);
-        if (adminCount <= 1) throw new AppError(400, "Cannot demote the last admin");
-    }
+    const target = await repo.findWorkspaceMember(workspaceId, memberId);
+    if (!target) throw new AppError(404, "Member not found");
+    if (role === "EMPLOYEE") await assertNotLastAdmin(workspaceId, target, "Cannot demote the last admin");
     return repo.updateWorkspaceMemberRole(workspaceId, memberId, role);
 }
 
 export async function deleteMember(workspaceId: number, memberId: number, requesterId: number) {
-    if (memberId === requesterId) {
-        const adminCount = await repo.countWorkspaceAdmins(workspaceId);
-        if (adminCount <= 1) throw new AppError(400, "Cannot remove the last admin");
+    const target = await repo.findWorkspaceMember(workspaceId, memberId);
+    if (!target) throw new AppError(404, "Member not found");
+    await assertNotLastAdmin(workspaceId, target, "Cannot remove the last admin");
+
+    const boardIds = await repo.removeMemberFromWorkspace(workspaceId, memberId);
+    // Tell anyone viewing those boards; the removed user's own client leaves the board
+    for (const boardId of boardIds) {
+        publishBoardEvent(boardId, requesterId, { type: "member_removed", memberId });
     }
-    return repo.deleteWorkspaceMember(workspaceId, memberId);
 }
