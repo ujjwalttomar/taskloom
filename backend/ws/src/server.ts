@@ -12,6 +12,8 @@ interface AuthenticatedSocket extends WebSocket {
 }
 
 const subscriber = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379");
+// ioredis reconnects and re-subscribes on its own; just log instead of "Unhandled error event"
+subscriber.on("error", (err) => console.error("[redis] subscriber error:", err.message));
 const rooms = new Map<number, Set<AuthenticatedSocket>>();
 
 const server = http.createServer();
