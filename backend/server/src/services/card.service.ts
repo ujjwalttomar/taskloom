@@ -46,24 +46,31 @@ export async function moveCard(
     const tList = await listRepo.findListInBoard(card.list.boardId, targetListId);
     if (!tList) throw new AppError(400, "Target list is not on this board");
 
+    // Neighbours must be other cards in the TARGET list — otherwise their order values are meaningless here
+    const neighbour = async (id: number) => {
+        if (id === cardId) throw new AppError(400, "A card can't be its own neighbour");
+        const n = await repo.findCardInList(targetListId, id);
+        if (!n) throw new AppError(400, "Adjacent card is not in the target list");
+        return n;
+    };
+
     let newOrder: number;
     if (afterCardId && beforeCardId) {
-        const [afterCard, beforeCard] = await Promise.all([
-            repo.findCardById_simple(afterCardId),
-            repo.findCardById_simple(beforeCardId),
-        ]);
-        if (!afterCard || !beforeCard) throw new AppError(404, "Adjacent card not found");
+        const [afterCard, beforeCard] = await Promise.all([neighbour(afterCardId), neighbour(beforeCardId)]);
         newOrder = (afterCard.order + beforeCard.order) / 2;
     } else if (afterCardId) {
-        const afterCard = await repo.findCardById_simple(afterCardId);
-        if (!afterCard) throw new AppError(404, "Card not found");
-        newOrder = afterCard.order + 1;
+        // Place it between `after` and whatever currently follows it (so a single neighbour never causes a tie)
+        const after = await neighbour(afterCardId);
+        const next = await repo.findNextCard(targetListId, after.order, cardId);
+        newOrder = next ? (after.order + next.order) / 2 : after.order + 1;
     } else if (beforeCardId) {
-        const beforeCard = await repo.findCardById_simple(beforeCardId);
-        if (!beforeCard) throw new AppError(404, "Card not found");
-        newOrder = beforeCard.order / 2;
+        const before = await neighbour(beforeCardId);
+        const prev = await repo.findPrevCard(targetListId, before.order, cardId);
+        newOrder = prev ? (prev.order + before.order) / 2 : before.order / 2;
     } else {
-        newOrder = 1;
+        // No neighbours given → append to the end (was order = 1, which collided with existing cards)
+        const last = await repo.findLastCardInList(targetListId, cardId);
+        newOrder = last ? last.order + 1 : 1;
     }
 
     const updatedCard = await repo.updateCard(cardId, { listId: targetListId, order: newOrder });
@@ -93,7 +100,19 @@ export async function assignCard(
     return assignment;
 }
 
-export async function unassignCard(cardId: number, targetUserId: number, boardId: number, requesterId: number) {
+export async function unassignCard(
+    cardId: number,
+    targetUserId: number,
+    boardId: number,
+    requesterId: number,
+    requesterRole: string,
+) {
+    // Same rule as assigning: members manage their own assignment, admins manage anyone's
+    if (requesterRole !== "ADMIN" && targetUserId !== requesterId) {
+        throw new AppError(403, "Can only unassign yourself");
+    }
+    const existing = await repo.findAssignment(cardId, targetUserId);
+    if (!existing) throw new AppError(404, "User is not assigned to this card");
     await repo.deleteAssignment(cardId, targetUserId);
     publishBoardEvent(boardId, requesterId, { type: "card_unassigned", cardId, userId: targetUserId });
 }

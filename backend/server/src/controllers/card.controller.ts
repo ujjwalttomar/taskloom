@@ -98,7 +98,7 @@ export const unassignCard = async (req: Request, res: Response) => {
     try {
         const cardId = parseInt(req.params["cardId"] as string);
         const userId = parseInt(req.params["userId"] as string);
-        await cardService.unassignCard(cardId, userId, req.boardMembership!.boardId, req.userId!);
+        await cardService.unassignCard(cardId, userId, req.boardMembership!.boardId, req.userId!, req.boardMembership!.role);
         return res.status(200).json({ message: "User unassigned" });
     } catch (error) {
         return handleError(res, error);

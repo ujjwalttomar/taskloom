@@ -17,11 +17,23 @@ export const findCardById = (cardId: number) =>
 export const findCardWithList = (cardId: number) =>
     prisma.card.findUnique({ where: { id: cardId }, include: { list: true } });
 
-export const findCardById_simple = (cardId: number) =>
-    prisma.card.findUnique({ where: { id: cardId } });
+/** A card only counts as a neighbour if it is in the given list. */
+export const findCardInList = (listId: number, cardId: number) =>
+    prisma.card.findFirst({ where: { id: cardId, listId } });
 
-export const findLastCardInList = (listId: number) =>
-    prisma.card.findFirst({ where: { listId }, orderBy: { order: "desc" } });
+/** The card directly after / before a given order value in a list (ignoring the card being moved). */
+export const findNextCard = (listId: number, order: number, excludeCardId: number) =>
+    prisma.card.findFirst({ where: { listId, order: { gt: order }, id: { not: excludeCardId } }, orderBy: { order: "asc" } });
+
+export const findPrevCard = (listId: number, order: number, excludeCardId: number) =>
+    prisma.card.findFirst({ where: { listId, order: { lt: order }, id: { not: excludeCardId } }, orderBy: { order: "desc" } });
+
+/** Last card of a list, optionally ignoring one card (the card being moved). */
+export const findLastCardInList = (listId: number, excludeCardId?: number) =>
+    prisma.card.findFirst({
+        where: { listId, ...(excludeCardId ? { id: { not: excludeCardId } } : {}) },
+        orderBy: { order: "desc" },
+    });
 
 export const createCard = (data: { title: string; description?: string; listId: number; creatorId: number; order: number }) =>
     prisma.card.create({ data });
