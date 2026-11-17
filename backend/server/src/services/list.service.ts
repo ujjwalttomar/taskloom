@@ -15,13 +15,15 @@ export async function createList(boardId: number, userId: number, title: string)
 }
 
 export async function editList(boardId: number, listId: number, userId: number, title: string) {
-    const list = await repo.updateList(listId, { title });
+    const list = await repo.updateListInBoard(boardId, listId, { title });
+    if (!list) throw new AppError(404, "List not found");
     publishBoardEvent(boardId, userId, { type: "list_edited", list });
     return list;
 }
 
 export async function deleteList(boardId: number, listId: number, userId: number) {
-    await repo.deleteList(listId);
+    const deleted = await repo.deleteListInBoard(boardId, listId);
+    if (!deleted) throw new AppError(404, "List not found");
     publishBoardEvent(boardId, userId, { type: "list_deleted", listId });
 }
 
@@ -32,28 +34,27 @@ export async function changeListOrder(
     afterListId?: number,
     beforeListId?: number,
 ) {
-    let newOrder: number;
+    // Neighbours must be on the same board, otherwise their order values mean nothing here
+    const neighbour = async (id: number) => {
+        const list = await repo.findListInBoard(boardId, id);
+        if (!list) throw new AppError(400, "Adjacent list is not on this board");
+        return list;
+    };
 
+    let newOrder: number;
     if (afterListId && beforeListId) {
-        const [afterList, beforeList] = await Promise.all([
-            repo.findListById(afterListId),
-            repo.findListById(beforeListId),
-        ]);
-        if (!afterList || !beforeList) throw new AppError(404, "Adjacent list not found");
+        const [afterList, beforeList] = await Promise.all([neighbour(afterListId), neighbour(beforeListId)]);
         newOrder = (afterList.order + beforeList.order) / 2;
     } else if (afterListId) {
-        const afterList = await repo.findListById(afterListId);
-        if (!afterList) throw new AppError(404, "List not found");
-        newOrder = afterList.order + 1;
+        newOrder = (await neighbour(afterListId)).order + 1;
     } else if (beforeListId) {
-        const beforeList = await repo.findListById(beforeListId);
-        if (!beforeList) throw new AppError(404, "List not found");
-        newOrder = beforeList.order / 2;
+        newOrder = (await neighbour(beforeListId)).order / 2;
     } else {
         throw new AppError(400, "Provide afterListId or beforeListId");
     }
 
-    const list = await repo.updateList(listId, { order: newOrder });
+    const list = await repo.updateListInBoard(boardId, listId, { order: newOrder });
+    if (!list) throw new AppError(404, "List not found");
     publishBoardEvent(boardId, userId, { type: "list_reordered", list });
     return list;
 }

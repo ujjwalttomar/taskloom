@@ -42,9 +42,9 @@ export async function moveCard(
     const card = await repo.findCardWithList(cardId);
     if (!card) throw new AppError(404, "Card not found");
 
-    const tList = await listRepo.findListById(targetListId);
-    if (!tList) throw new AppError(404, "Target list not found");
-    if (tList.boardId !== card.list.boardId) throw new AppError(400, "Cannot move card to a different board");
+    // Scoped to the card's own board: a list on another board simply isn't found
+    const tList = await listRepo.findListInBoard(card.list.boardId, targetListId);
+    if (!tList) throw new AppError(400, "Target list is not on this board");
 
     let newOrder: number;
     if (afterCardId && beforeCardId) {
