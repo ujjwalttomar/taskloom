@@ -2,6 +2,7 @@ import express from "express";
 import { sendInvite, getInviteDetails, acceptInvite } from "../controllers/invite.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { isMember, isAdmin } from "../middlewares/auth.middleware";
+import { inviteLimiter } from "../middlewares/rateLimiter";
 
 const router = express.Router();
 
@@ -11,6 +12,7 @@ router.post(
     authenticate,
     isMember,
     isAdmin,
+    inviteLimiter, // after the auth checks, so anonymous requests can't use up an admin's quota
     sendInvite
 );
 

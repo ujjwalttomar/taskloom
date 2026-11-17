@@ -11,11 +11,16 @@ import listRouter from "./routes/list.routes";
 import workspaceRouter from "./routes/workspace.routes";
 import inviteRouter from "./routes/invite.routes";
 import { notFound, errorHandler } from "./middlewares/errorHandler";
+import { apiLimiter } from "./middlewares/rateLimiter";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Render (and most hosts) sit behind one proxy hop. Without this every request would
+// appear to come from the proxy's IP, and the rate limiter would treat all users as one.
+app.set("trust proxy", 1);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -24,6 +29,7 @@ app.use(cors({
     credentials : true
 }));
 
+app.use("/api", apiLimiter);
 app.use("/auth", authRouter);
 app.use("/api", boardRouter);
 app.use("/api", commentRouter);
