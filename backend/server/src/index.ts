@@ -10,6 +10,7 @@ import cardRouter from "./routes/card.routes";
 import listRouter from "./routes/list.routes";
 import workspaceRouter from "./routes/workspace.routes";
 import inviteRouter from "./routes/invite.routes";
+import { notFound, errorHandler } from "./middlewares/errorHandler";
 
 dotenv.config();
 
@@ -34,9 +35,11 @@ app.use("/api", inviteRouter);
 
 app.get("/health", (req, res)=>{
     res.status(200).json({status : "ok"});
-})
+});
 
-
+// Must stay last: JSON 404 for unknown routes, then the central error handler
+app.use(notFound);
+app.use(errorHandler);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

@@ -1,12 +1,7 @@
 import { Request, Response } from "express";
 import { CreateListSchema, EditListSchema, ChangeListOrderSchema } from "../schemas/list.schemas";
 import * as listService from "../services/list.service";
-import { AppError } from "../utils/AppError";
-
-function handleError(res: Response, error: unknown) {
-    if (error instanceof AppError) return res.status(error.statusCode).json({ message: error.message });
-    return res.status(500).json({ message: "Server error" });
-}
+import { handleError } from "../utils/handleError";
 
 function firstIssue(err: { issues: { message: string }[] }) {
     return err.issues[0]?.message ?? "Validation error";

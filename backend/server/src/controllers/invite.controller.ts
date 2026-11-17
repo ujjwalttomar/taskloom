@@ -1,12 +1,7 @@
 import { Request, Response } from "express";
 import { SendInviteSchema } from "../schemas/invite.schemas";
 import * as inviteService from "../services/invite.service";
-import { AppError } from "../utils/AppError";
-
-function handleError(res: Response, error: unknown) {
-    if (error instanceof AppError) return res.status(error.statusCode).json({ message: error.message });
-    return res.status(500).json({ message: "Server error" });
-}
+import { handleError } from "../utils/handleError";
 
 function firstIssue(err: { issues: { message: string }[] }) {
     return err.issues[0]?.message ?? "Validation error";

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { GoogleCallbackSchema } from "../schemas/auth.schemas";
 import * as authService from "../services/auth.service";
 import { AppError } from "../utils/AppError";
+import { handleError } from "../utils/handleError";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -49,11 +50,7 @@ export const refreshAccessToken = async (req: Request, res: Response) => {
         res.cookie("accessToken", accessToken, cookieOpts(15 * 60 * 1000));
         res.status(200).json({ message: "token refreshed!" });
     } catch (error) {
-        if (error instanceof AppError) {
-            res.status(error.statusCode).json({ message: error.message });
-            return;
-        }
-        res.status(500).json({ message: "Server error" });
+        handleError(res, error);
     }
 };
 
@@ -62,11 +59,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
         const user = await authService.getCurrentUser(req.userId!);
         res.status(200).json({ user });
     } catch (error) {
-        if (error instanceof AppError) {
-            res.status(error.statusCode).json({ message: error.message });
-            return;
-        }
-        res.status(500).json({ message: "Server error" });
+        handleError(res, error);
     }
 };
 
@@ -78,6 +71,6 @@ export const logoutUser = async (req: Request, res: Response) => {
         res.clearCookie("refreshToken", opts);
         res.status(200).json({ message: "logged out successfully!" });
     } catch (error) {
-        res.status(500).json({ message: "Server error" });
+        handleError(res, error);
     }
 };

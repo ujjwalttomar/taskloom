@@ -1,11 +1,6 @@
 import { Request, Response } from "express";
 import * as userProfileService from "../services/userProfile.service";
-import { AppError } from "../utils/AppError";
-
-function handleError(res: Response, error: unknown) {
-    if (error instanceof AppError) return res.status(error.statusCode).json({ message: error.message });
-    return res.status(500).json({ message: "Server error" });
-}
+import { handleError } from "../utils/handleError";
 
 // GET /api/boards/:boardId/members/:memberId/profile
 export const getBoardProfile = async (req: Request, res: Response) => {
