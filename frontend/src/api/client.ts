@@ -1,42 +1,56 @@
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-    const res = await fetch(`${BASE}${path}`, {
-        credentials: "include",
-        headers: { "Content-Type": "application/json", ...options?.headers },
+/** Fired when the session can't be refreshed; AuthProvider listens and logs the user out. */
+export const SESSION_EXPIRED_EVENT = "taskloom:session-expired";
+
+/** Error carrying the HTTP status, so callers can react to e.g. 403/404 specifically. */
+export class ApiError extends Error {
+    status: number;
+    constructor(status: number, message: string) {
+        super(message);
+        this.status = status;
+    }
+}
+
+function send(path: string, options?: RequestInit) {
+    return fetch(`${BASE}${path}`, {
         ...options,
+        credentials: "include",
+        // Only JSON bodies need Content-Type; setting it on GET/DELETE forces an extra CORS preflight
+        headers: { ...(options?.body ? { "Content-Type": "application/json" } : {}), ...options?.headers },
     });
+}
 
-    // On 401, try to refresh the access token and retry once
-    if (res.status === 401) {
-        try {
-            const refreshRes = await fetch(`${BASE}/auth/refresh`, {
-                method: "POST",
-                credentials: "include",
-            });
-            if (!refreshRes.ok) throw new Error("refresh failed");
+async function toError(res: Response): Promise<ApiError> {
+    const body = await res.json().catch(() => null);
+    // The API answers { message }; older/edge responses may use { error }
+    const message = body?.message ?? body?.error ?? (res.status === 429 ? "Too many requests, please slow down" : "Request failed");
+    return new ApiError(res.status, message);
+}
 
-            // Retry original request with fresh token
-            const retryRes = await fetch(`${BASE}${path}`, {
-                credentials: "include",
-                headers: { "Content-Type": "application/json", ...options?.headers },
-                ...options,
-            });
-            if (!retryRes.ok) {
-                const err = await retryRes.json().catch(() => ({ message: "Session expired" }));
-                throw new Error(err.message || "Session expired");
-            }
-            return retryRes.json();
-        } catch {
-            throw new Error("Session expired. Please log in again.");
+// Single-flight refresh: if several requests get a 401 at once, they all wait on ONE refresh call
+let refreshing: Promise<boolean> | null = null;
+function refreshSession(): Promise<boolean> {
+    refreshing ??= send("/auth/refresh", { method: "POST" })
+        .then((r) => r.ok)
+        .catch(() => false)
+        .finally(() => { refreshing = null; });
+    return refreshing;
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+    let res = await send(path, options);
+
+    // Access token (15 min) expired → refresh once and retry. Never for the auth endpoints themselves.
+    if (res.status === 401 && !path.startsWith("/auth/refresh") && !path.startsWith("/auth/logout")) {
+        if (!(await refreshSession())) {
+            window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+            throw new ApiError(401, "Session expired. Please log in again.");
         }
+        res = await send(path, options);
     }
 
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Request failed" }));
-        throw new Error(err.message || "Request failed");
-    }
-
+    if (!res.ok) throw await toError(res); // the server's real message, not a generic one
     return res.json();
 }
 
@@ -47,6 +61,8 @@ export const api = {
         me: () => request<{ user: import("../types").User }>("/auth/me"),
         refresh: () => request<{ message: string }>("/auth/refresh", { method: "POST" }),
         logout: () => request<{ message: string }>("/auth/logout", { method: "POST" }),
+        // Short-lived token for the WebSocket server (the auth cookie never reaches its host)
+        wsTicket: () => request<{ ticket: string }>("/auth/ws-ticket"),
     },
 
     // ─── Workspaces ─────────────────────────────────────

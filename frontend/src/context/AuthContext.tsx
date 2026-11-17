@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { api } from "../api/client";
+import { api, SESSION_EXPIRED_EVENT } from "../api/client";
 import type { User } from "../types";
 
 interface AuthContextType {
@@ -18,28 +18,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const init = async () => {
-            try {
-                const data = await api.auth.me();
-                setUser(data.user);
-            } catch {
-                try {
-                    await api.auth.refresh();
-                    const data = await api.auth.me();
-                    setUser(data.user);
-                } catch {
-                    setUser(null);
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-        init();
+        // api.auth.me() already refreshes an expired access token by itself
+        api.auth.me()
+            .then((data) => setUser(data.user))
+            .catch(() => setUser(null))
+            .finally(() => setLoading(false));
+
+        // The API client fires this when the refresh token is gone/expired mid-session;
+        // clearing the user makes ProtectedRoute send them to the login page.
+        const onExpired = () => setUser(null);
+        window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+        return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
     }, []);
 
     const logout = async () => {
-        await api.auth.logout();
-        setUser(null);
+        try {
+            await api.auth.logout();
+        } finally {
+            setUser(null); // log out locally even if the request failed
+        }
     };
 
     return (
