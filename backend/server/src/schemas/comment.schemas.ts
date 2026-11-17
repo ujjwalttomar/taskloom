@@ -1,13 +1,14 @@
 import { z } from "zod";
+import { commentTextField } from "./fields";
 
 export const CreateCommentSchema = z.object({
     body: z.object({
-        text: z.string().min(1, "Comment text is missing"),
+        text: commentTextField,
     }),
 });
 
 export const EditCommentSchema = z.object({
     body: z.object({
-        text: z.string().min(1, "Comment text is missing"),
+        text: commentTextField,
     }),
 });

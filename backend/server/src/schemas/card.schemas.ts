@@ -1,16 +1,17 @@
 import { z } from "zod";
+import { descriptionField, nameField } from "./fields";
 
 export const CreateCardSchema = z.object({
     body: z.object({
-        title: z.string().min(1, "Card title is missing"),
-        description: z.string().optional(),
+        title: nameField("Card title", 200),
+        description: descriptionField.optional(),
     }),
 });
 
 export const EditCardSchema = z.object({
     body: z.object({
-        title: z.string().optional(),
-        description: z.string().optional(),
+        title: nameField("Card title", 200).optional(),
+        description: descriptionField.optional(),
     }),
 });
 

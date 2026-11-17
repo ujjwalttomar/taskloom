@@ -1,14 +1,15 @@
 import { z } from "zod";
+import { nameField } from "./fields";
 
 export const CreateListSchema = z.object({
     body: z.object({
-        title: z.string().min(1, "List title is missing"),
+        title: nameField("List title"),
     }),
 });
 
 export const EditListSchema = z.object({
     body: z.object({
-        title: z.string().min(1, "Title is required"),
+        title: nameField("List title"),
     }),
 });
 

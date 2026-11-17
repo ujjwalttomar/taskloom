@@ -1,16 +1,17 @@
 import { z } from "zod";
+import { descriptionField, nameField } from "./fields";
 
 export const CreateBoardSchema = z.object({
     body: z.object({
-        title: z.string().min(1, "Board title is missing"),
-        description: z.string().optional(),
+        title: nameField("Board title"),
+        description: descriptionField.optional(),
     }),
 });
 
 export const EditBoardSchema = z.object({
     body: z.object({
-        title: z.string().optional(),
-        description: z.string().optional(),
+        title: nameField("Board title").optional(),
+        description: descriptionField.optional(),
     }),
 });
 
