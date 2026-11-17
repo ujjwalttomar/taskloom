@@ -105,8 +105,9 @@ export function InvitePage() {
                                 <p className="text-slate-400 text-sm mb-4">
                                     Sign in with the invited email to accept.
                                 </p>
+                                {/* returnTo is carried through Google login, so the user lands back on this invite */}
                                 <button
-                                    onClick={() => navigate(`/?invite=${token}`)}
+                                    onClick={() => navigate(`/?returnTo=${encodeURIComponent(`/invite/${token}`)}`)}
                                     className="w-full bg-accent hover:bg-accent-hover text-white px-4 py-3 rounded-xl text-sm font-medium transition-colors"
                                 >
                                     Sign in to accept

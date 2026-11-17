@@ -1,8 +1,27 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
+// Codes sent back by the server as /?authError=<code>
+const AUTH_ERRORS: Record<string, string> = {
+    cancelled: "Sign-in was cancelled.",
+    invalid_state: "Your sign-in session expired. Please try again.",
+    unverified_email: "Your Google email address isn't verified, so it can't be used to sign in.",
+    login_failed: "Sign-in failed. Please try again in a moment.",
+};
+
+/** Only same-site paths (e.g. /invite/abc) — never an absolute URL. */
+function safeReturnTo(value: string | null): string | null {
+    return value && value.startsWith("/") && !value.startsWith("//") ? value : null;
+}
 
 export function LoginPage() {
     const { user, loading } = useAuth();
+    const [params] = useSearchParams();
+    const returnTo = safeReturnTo(params.get("returnTo"));
+    const authError = params.get("authError");
+    const loginUrl = `${API_URL}/auth/google${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
 
     if (loading) {
         return (
@@ -12,7 +31,7 @@ export function LoginPage() {
         );
     }
 
-    if (user) return <Navigate to="/dashboard" replace />;
+    if (user) return <Navigate to={returnTo ?? "/dashboard"} replace />;
 
     return (
         <div className="min-h-screen bg-bg flex">
@@ -82,8 +101,14 @@ export function LoginPage() {
                     <h1 className="text-3xl font-bold text-white mb-1.5 tracking-tight">Welcome back</h1>
                     <p className="text-slate-500 text-sm mb-10">Sign in to continue to your workspace</p>
 
+                    {authError && (
+                        <p className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                            {AUTH_ERRORS[authError] ?? AUTH_ERRORS.login_failed}
+                        </p>
+                    )}
+
                     <a
-                        href={`${import.meta.env.VITE_API_URL ?? "http://localhost:3000"}/auth/google`}
+                        href={loginUrl}
                         className="flex items-center justify-center gap-3 w-full bg-white text-gray-800 font-medium py-3 px-4 rounded-xl hover:bg-gray-50 transition-all duration-150 shadow-lg shadow-black/30"
                     >
                         <svg width="18" height="18" viewBox="0 0 20 20">

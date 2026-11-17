@@ -18,12 +18,15 @@ function getOAuthClient() {
     return client;
 }
 
-export function buildGoogleAuthUrl(): string {
+export function buildGoogleAuthUrl(state: string): string {
     const params = new URLSearchParams({
         client_id: process.env.GOOGLE_CLIENT_ID!,
         redirect_uri: process.env.GOOGLE_REDIRECT_URI!,
         response_type: "code",
         scope: "email profile",
+        state,
+        // Let people pick an account (needed when an invite was sent to a different address)
+        prompt: "select_account",
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
@@ -36,14 +39,19 @@ export interface AuthTokens {
 export async function handleGoogleLogin(code: string): Promise<AuthTokens> {
     const { tokens } = await getOAuthClient().getToken(code);
 
+    if (!tokens.id_token) throw new AppError(400, "Google did not return an ID token");
     const ticket = await getOAuthClient().verifyIdToken({
-        idToken: tokens.id_token!,
+        idToken: tokens.id_token,
         audience: process.env.GOOGLE_CLIENT_ID,
     });
 
     const googleUser = ticket.getPayload();
     if (!googleUser?.email || !googleUser?.name) {
         throw new AppError(400, "Google account missing required info");
+    }
+    // Users are matched (and invites accepted) by email, so the email must be proven
+    if (googleUser.email_verified !== true) {
+        throw new AppError(403, "Google email address is not verified");
     }
 
     let user = await userRepo.findUserByEmail(googleUser.email);
