@@ -1,8 +1,12 @@
 import prisma from "../../../shared/db/client";
 
+// Only the user fields the UI needs (no googleId / timestamps sent to every member)
+const publicUser = { select: { id: true, name: true, email: true } } as const;
+
 export const findAllBoardsForUser = (workspaceId: number, userId: number) =>
     prisma.board.findMany({
         where: { workspaceId, members: { some: { memberId: userId } } },
+        include: { members: { include: { user: publicUser } } }, // dashboard shows member avatars
     });
 
 export const findBoardById = (boardId: number) =>
@@ -11,9 +15,14 @@ export const findBoardById = (boardId: number) =>
         include: {
             lists: {
                 orderBy: { order: "asc" },
-                include: { cards: { orderBy: { order: "asc" } } },
+                include: {
+                    cards: {
+                        orderBy: { order: "asc" },
+                        include: { assignedTo: { include: { user: publicUser } } }, // assignee avatars on cards
+                    },
+                },
             },
-            members: { include: { user: true } },
+            members: { include: { user: publicUser } },
         },
     });
 
@@ -28,6 +37,7 @@ export const createBoard = (data: { title: string; description?: string; workspa
             workspaceId: data.workspaceId,
             members: { create: { memberId: data.userId, role: "ADMIN" } },
         },
+        include: { members: { include: { user: publicUser } } },
     });
 
 export const updateBoard = (boardId: number, data: { title?: string; description?: string }) =>
