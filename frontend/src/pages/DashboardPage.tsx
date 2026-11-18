@@ -30,6 +30,7 @@ export function DashboardPage() {
     const [editWsNameValue, setEditWsNameValue] = useState("");
     const [savingWsName, setSavingWsName] = useState(false);
     const [deletingWs, setDeletingWs] = useState(false);
+    const [leavingWs, setLeavingWs] = useState(false);
 
     // Unified add/invite state
     const [addEmail, setAddEmail] = useState("");
@@ -179,6 +180,21 @@ export function DashboardPage() {
         } finally {
             setSavingWsName(false);
             setEditingWsName(false);
+        }
+    };
+
+    const handleLeaveWorkspace = async () => {
+        if (!selectedWorkspace) return;
+        if (!confirm(`Leave "${selectedWorkspace.name}"? You'll lose access to its boards, and you'd need a new invite to come back.`)) return;
+        setLeavingWs(true);
+        try {
+            await api.workspaces.leave(selectedWorkspace.id);
+            await refreshWorkspaces(); // the workspace disappears from the sidebar
+            setTab("boards");
+        } catch (e: any) {
+            alert(e.message || "Couldn't leave the workspace"); // e.g. "You're the last admin…"
+        } finally {
+            setLeavingWs(false);
         }
     };
 
@@ -390,6 +406,15 @@ export function DashboardPage() {
                                         {deletingWs ? "Deleting..." : "Delete"}
                                     </button>
                                 )}
+                                {/* Everyone can leave; the server refuses the last admin with a clear message */}
+                                <button
+                                    onClick={handleLeaveWorkspace}
+                                    disabled={leavingWs}
+                                    className="px-3 py-2 text-slate-500 hover:text-white hover:bg-elevated border border-transparent hover:border-border rounded-lg text-xs transition-colors disabled:opacity-50"
+                                    title="Leave this workspace"
+                                >
+                                    {leavingWs ? "Leaving..." : "Leave"}
+                                </button>
                                 {tab === "boards" && (
                                     <button
                                         onClick={() => setShowCreateBoard(true)}

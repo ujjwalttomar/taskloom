@@ -81,6 +81,17 @@ export const updateMemberRole = async (req: Request, res: Response) => {
     }
 };
 
+// POST /api/workspaces/:workspaceId/leave
+export const leaveWorkspace = async (req: Request, res: Response) => {
+    try {
+        const workspaceId = parseInt(req.params["workspaceId"] as string);
+        await workspaceService.leaveWorkspace(workspaceId, req.userId!);
+        return res.status(200).json({ message: "You left the workspace", workspaceId });
+    } catch (error) {
+        return handleError(res, error);
+    }
+};
+
 export const deleteMember = async (req: Request, res: Response) => {
     try {
         const workspaceId = parseInt(req.params["workspaceId"] as string);

@@ -82,3 +82,33 @@ describe("workspaces: payloads (L1)", () => {
     });
 });
 
+
+describe("leaving a workspace", () => {
+    it("an employee can leave: workspace, boards and assignments go, and the boards are told", async () => {
+        const { workspace, board, employee, cards: [a] } = await createBoardFixture();
+        await as(employee).post(`/api/cards/${a!.id}/assign`, { userId: employee.id }).expect(201);
+
+        vi.mocked(publishBoardEvent).mockClear();
+        await as(employee).post(`/api/workspaces/${workspace.id}/leave`).expect(200);
+
+        await as(employee).get(`/api/workspaces/${workspace.id}`).expect(403);
+        await as(employee).get(`/api/boards/${board.id}`).expect(403);
+        expect(await prisma.assignedCard.count({ where: { userId: employee.id } })).toBe(0);
+        // senderId 0, so the leaver's own open tabs hear it too
+        expect(publishBoardEvent).toHaveBeenCalledWith(board.id, 0, { type: "member_removed", memberId: employee.id });
+    });
+
+    it("the last admin can't leave; with a second admin they can", async () => {
+        const { workspace, admin, employee } = await createBoardFixture();
+        const res = await as(admin).post(`/api/workspaces/${workspace.id}/leave`).expect(400);
+        expect(res.body.message).toMatch(/last admin/);
+
+        await as(admin).patch(`/api/workspaces/${workspace.id}/members/${employee.id}`, { role: "ADMIN" }).expect(200);
+        await as(admin).post(`/api/workspaces/${workspace.id}/leave`).expect(200);
+    });
+
+    it("someone who isn't a member can't 'leave'", async () => {
+        const { workspace, outsider } = await createBoardFixture();
+        await as(outsider).post(`/api/workspaces/${workspace.id}/leave`).expect(403);
+    });
+});

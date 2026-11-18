@@ -86,6 +86,7 @@ export const api = {
             }),
         removeMember: (id: number, memberId: number) =>
             request(`/api/workspaces/${id}/members/${memberId}`, { method: "DELETE" }),
+        leave: (id: number) => request<{ message: string }>(`/api/workspaces/${id}/leave`, { method: "POST" }),
     },
 
     // ─── Boards ──────────────────────────────────────────

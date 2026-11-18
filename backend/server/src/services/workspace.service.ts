@@ -54,6 +54,23 @@ export async function updateMemberRole(workspaceId: number, memberId: number, ro
     return updated;
 }
 
+/**
+ * Leave a workspace yourself. It works exactly like being removed (board memberships and
+ * assignments in this workspace go too), and the last admin can't leave, so a workspace
+ * always keeps someone who can manage it.
+ */
+export async function leaveWorkspace(workspaceId: number, userId: number) {
+    const me = await repo.findWorkspaceMember(workspaceId, userId);
+    if (!me) throw new AppError(404, "Not a member of this workspace");
+    await assertNotLastAdmin(workspaceId, me, "You're the last admin: make someone else an admin, or delete the workspace");
+
+    const boardIds = await repo.removeMemberFromWorkspace(workspaceId, userId);
+    // senderId 0: nobody is skipped, so the leaver's own open tabs leave those boards too
+    for (const boardId of boardIds) {
+        publishBoardEvent(boardId, 0, { type: "member_removed", memberId: userId });
+    }
+}
+
 export async function deleteMember(workspaceId: number, memberId: number, requesterId: number) {
     const target = await repo.findWorkspaceMember(workspaceId, memberId);
     if (!target) throw new AppError(404, "Member not found");
