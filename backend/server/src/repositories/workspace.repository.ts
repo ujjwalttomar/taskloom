@@ -7,12 +7,12 @@ export const findAllWorkspacesForUser = (userId: number) =>
         include: { members: { include: { user: publicUser } } },
     });
 
-/** Only the boards `userId` is a member of: board access is per board, even inside one workspace. */
-export const findWorkspaceById = (workspaceId: number, userId: number) =>
+/** Admins get every board; everyone else only the boards they're a member of. */
+export const findWorkspaceById = (workspaceId: number, userId: number, allBoards = false) =>
     prisma.workspace.findUnique({
         where: { id: workspaceId },
         include: {
-            boards: { where: { members: { some: { memberId: userId } } } },
+            boards: allBoards ? true : { where: { members: { some: { memberId: userId } } } },
             members: { include: { user: publicUser } },
         },
     });
@@ -59,6 +59,13 @@ export const removeMemberFromWorkspace = (workspaceId: number, memberId: number)
         await tx.boardMember.deleteMany({ where: { memberId, board: { workspaceId } } });
         await tx.workspaceMember.delete({ where: { workspaceId_memberId: { workspaceId, memberId } } });
         return boards.map((b) => b.boardId);
+    });
+
+/** Every board in the workspace, with this user's explicit membership (if any). */
+export const findBoardsWithMembership = (workspaceId: number, memberId: number) =>
+    prisma.board.findMany({
+        where: { workspaceId },
+        select: { id: true, members: { where: { memberId }, select: { boardId: true, memberId: true, role: true } } },
     });
 
 export const countWorkspaceAdmins = (workspaceId: number) =>

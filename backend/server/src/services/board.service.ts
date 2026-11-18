@@ -3,8 +3,9 @@ import * as userRepo from "../repositories/user.repository";
 import { publishBoardEvent } from "../redis";
 import { AppError } from "../utils/AppError";
 
-export async function getAllBoards(workspaceId: number, userId: number) {
-    return repo.findAllBoardsForUser(workspaceId, userId);
+export async function getAllBoards(workspaceId: number, userId: number, workspaceRole: "ADMIN" | "EMPLOYEE") {
+    // Workspace admins see (and can open) every board; everyone else only the boards they're on
+    return repo.findAllBoardsForUser(workspaceId, userId, workspaceRole === "ADMIN");
 }
 
 export async function getBoard(boardId: number) {

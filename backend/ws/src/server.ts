@@ -4,6 +4,7 @@ import Redis from "ioredis";
 import dotenv from "dotenv";
 import { verifyAccessToken, verifyWsTicket } from "../../shared/auth/token";
 import prisma from "../../shared/db/client";
+import { getBoardRole } from "../../shared/db/access";
 
 dotenv.config();
 
@@ -91,15 +92,13 @@ wss.on("connection", (ws: AuthenticatedSocket) => {
     });
 });
 
-/** Only board members may join a board's room (previously any logged-in user could). */
+/** Only people with access may join a board's room: board members and workspace admins
+ *  (the same rule as the REST API, shared/db/access.ts). Previously anyone logged in could. */
 async function handleJoin(ws: AuthenticatedSocket, boardId: number) {
     const seq = ++ws.joinSeq;
     let isMember = false;
     try {
-        const membership = await prisma.boardMember.findUnique({
-            where: { boardId_memberId: { boardId, memberId: ws.userId } },
-        });
-        isMember = !!membership;
+        isMember = (await getBoardRole(boardId, ws.userId)) !== null;
     } catch (err) {
         console.error("[ws] membership check failed:", (err as Error).message);
     }
@@ -181,10 +180,17 @@ subscriber.on("message", (channel, message) => {
             }
         }
 
-        // Access was revoked: after telling them (so the UI can leave), stop sending them events
+        // Possibly revoked access: after telling them, re-check and evict only if access is really
+        // gone (a workspace admin removed from the member list can still reach the board)
         if (payload.type === "member_removed") {
-            for (const socket of [...room]) {
-                if (socket.userId === payload.memberId) leaveRoom(socket);
+            const sockets = [...room].filter((socket) => socket.userId === payload.memberId);
+            if (sockets.length) {
+                getBoardRole(boardId, payload.memberId)
+                    .catch(() => null) // fail closed
+                    .then((role) => {
+                        if (role) return;
+                        for (const socket of sockets) if (socket.boardId === boardId) leaveRoom(socket);
+                    });
             }
         }
         if (payload.type === "board_deleted") {

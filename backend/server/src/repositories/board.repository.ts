@@ -1,9 +1,9 @@
 import prisma from "../../../shared/db/client";
 import { publicUser } from "./select";
 
-export const findAllBoardsForUser = (workspaceId: number, userId: number) =>
+export const findAllBoardsForUser = (workspaceId: number, userId: number, allBoards = false) =>
     prisma.board.findMany({
-        where: { workspaceId, members: { some: { memberId: userId } } },
+        where: allBoards ? { workspaceId } : { workspaceId, members: { some: { memberId: userId } } },
         include: { members: { include: { user: publicUser } } }, // dashboard shows member avatars
     });
 

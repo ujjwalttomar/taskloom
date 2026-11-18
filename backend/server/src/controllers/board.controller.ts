@@ -15,7 +15,7 @@ function firstIssue(err: { issues: { message: string }[] }) {
 export const getAllBoards = async (req: Request, res: Response) => {
     try {
         const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const boards = await boardService.getAllBoards(workspaceId, req.userId!);
+        const boards = await boardService.getAllBoards(workspaceId, req.userId!, req.membership!.role);
         return res.status(200).json({ boards });
     } catch (error) {
         return handleError(res, error);
@@ -40,7 +40,8 @@ export const getSpecificBoard = async (req: Request, res: Response) => {
     try {
         const boardId = parseInt(req.params["boardId"] as string);
         const board = await boardService.getBoard(boardId);
-        return res.status(200).json({ board });
+        // myRole: the caller's effective role. A workspace admin may not be in board.members at all
+        return res.status(200).json({ board: { ...board, myRole: req.boardMembership!.role } });
     } catch (error) {
         return handleError(res, error);
     }

@@ -197,15 +197,21 @@ export function BoardPage() {
                     : prev);
                 break;
             case "member_role_updated":
+                // My own effective role may have changed (board role or workspace role): ask the server
+                if (event.member.memberId === userIdRef.current) {
+                    loadBoard();
+                    break;
+                }
                 setBoard((prev) => prev ? {
                     ...prev,
                     members: prev.members.map((m) => m.memberId === event.member.memberId ? { ...m, role: event.member.role } : m),
                 } : prev);
                 break;
             case "member_removed":
-                // If *I* was removed, I no longer have access to this board
+                // If *I* was removed, re-check: a workspace admin keeps access without being a member.
+                // loadBoard sends me to the dashboard if the board now answers 403.
                 if (event.memberId === userIdRef.current) {
-                    navigate("/dashboard");
+                    loadBoard();
                     break;
                 }
                 setBoard((prev) => prev ? { ...prev, members: prev.members.filter((m) => m.memberId !== event.memberId) } : prev);
@@ -214,7 +220,7 @@ export function BoardPage() {
                 navigate("/dashboard");
                 break;
         }
-    }, [navigate]);
+    }, [navigate, loadBoard]);
 
     const wsStatus = useWebSocket(boardId, handleWsEvent, { onReconnect: loadBoard });
 
@@ -466,7 +472,9 @@ export function BoardPage() {
 
     // Board admins can rename/delete the board, manage members and delete lists.
     // The server enforces this anyway; hiding the controls avoids confusing 403s for employees.
-    const isBoardAdmin = board?.members.find((m) => m.memberId === user?.id)?.role === "ADMIN";
+    // myRole comes from the server because workspace admins are board admins without being in
+    // board.members; the members list is only a fallback.
+    const isBoardAdmin = (board?.myRole ?? board?.members.find((m) => m.memberId === user?.id)?.role) === "ADMIN";
 
     // DragOverlay content
     const activeList = activeListId ? lists.find((l) => l.id === activeListId) : null;

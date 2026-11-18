@@ -30,6 +30,8 @@ export interface Board {
     createdAt: string;
     members: BoardMember[];
     lists?: List[];
+    /** GET /boards/:id only: my effective role (workspace admins are board ADMIN on every board) */
+    myRole?: "ADMIN" | "EMPLOYEE";
 }
 
 export interface BoardMember {
