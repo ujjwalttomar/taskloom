@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
-import type { Card, Comment, BoardMember } from "../types";
+import type { Card, Comment, BoardMember, WsEvent } from "../types";
 
 interface CardModalProps {
     cardId: number;
@@ -9,9 +9,11 @@ interface CardModalProps {
     onClose: () => void;
     onCardUpdated: (card: Card) => void;
     onCardDeleted: (cardId: number) => void;
+    /** Live events from the board's WebSocket; returns an unsubscribe function */
+    subscribeCardEvents?: (listener: (event: WsEvent) => void) => () => void;
 }
 
-export function CardModal({ cardId, boardId, onClose, onCardUpdated, onCardDeleted }: CardModalProps) {
+export function CardModal({ cardId, boardId, onClose, onCardUpdated, onCardDeleted, subscribeCardEvents }: CardModalProps) {
     const { user } = useAuth();
     const [card, setCard] = useState<Card | null>(null);
     const [boardMembers, setBoardMembers] = useState<BoardMember[]>([]);
@@ -41,6 +43,45 @@ export function CardModal({ cardId, boardId, onClose, onCardUpdated, onCardDelet
             setLoading(false);
         });
     }, [cardId, boardId]);
+
+    // Keep the open card in sync with what other people do to it (comments, assignees, edits)
+    useEffect(() => {
+        if (!subscribeCardEvents) return;
+        return subscribeCardEvents((event) => {
+            switch (event.type) {
+                case "comment_created":
+                    if (event.comment.cardId !== cardId) return;
+                    setCard((prev) => prev && !(prev.comments ?? []).some((c) => c.id === event.comment.id)
+                        ? { ...prev, comments: [event.comment, ...(prev.comments ?? [])] }
+                        : prev);
+                    break;
+                case "comment_edited":
+                    if (event.comment.cardId !== cardId) return;
+                    setCard((prev) => prev ? { ...prev, comments: prev.comments?.map((c) => c.id === event.comment.id ? event.comment : c) } : prev);
+                    break;
+                case "comment_deleted":
+                    setCard((prev) => prev ? { ...prev, comments: prev.comments?.filter((c) => c.id !== event.commentId) } : prev);
+                    break;
+                case "card_assigned":
+                    if (event.cardId !== cardId) return;
+                    setCard((prev) => prev && !(prev.assignedTo ?? []).some((a) => a.userId === event.assignment.userId)
+                        ? { ...prev, assignedTo: [...(prev.assignedTo ?? []), event.assignment] }
+                        : prev);
+                    break;
+                case "card_unassigned":
+                    if (event.cardId !== cardId) return;
+                    setCard((prev) => prev ? { ...prev, assignedTo: prev.assignedTo?.filter((a) => a.userId !== event.userId) } : prev);
+                    break;
+                case "card_edited":
+                    if (event.card.id !== cardId) return;
+                    setCard((prev) => prev ? { ...prev, title: event.card.title, description: event.card.description } : prev);
+                    break;
+                case "card_deleted":
+                    if (event.cardId === cardId) onClose(); // someone else deleted the card I'm looking at
+                    break;
+            }
+        });
+    }, [subscribeCardEvents, cardId, onClose]);
 
     const handleSaveTitle = async () => {
         if (!card || !titleValue.trim() || titleValue === card.title) {

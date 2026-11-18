@@ -96,6 +96,7 @@ export type WsEvent =
     | { type: "member_added"; member: BoardMember }
     | { type: "member_role_updated"; member: BoardMember }
     | { type: "member_removed"; memberId: number }
+    | { type: "join_denied"; boardId: number }
     | { type: "user_joined_board"; userId: number }
     | { type: "user_left_board"; userId: number }
     | { type: "board_presence"; onlineUserIds: number[] };

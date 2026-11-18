@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
     DndContext,
@@ -19,6 +19,7 @@ import {
     arrayMove,
 } from "@dnd-kit/sortable";
 import { api } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { List } from "../components/List";
 import { CardModal } from "../components/CardModal";
@@ -38,6 +39,17 @@ export function BoardPage() {
     const { boardId: boardIdParam } = useParams<{ boardId: string }>();
     const boardId = parseInt(boardIdParam ?? "0");
     const navigate = useNavigate();
+
+    const { user } = useAuth();
+    const userIdRef = useRef<number | undefined>(user?.id);
+    useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
+
+    // The open CardModal subscribes here to receive comment/assignment events for its card
+    const cardEventListeners = useRef(new Set<(event: WsEvent) => void>());
+    const subscribeCardEvents = useCallback((listener: (event: WsEvent) => void) => {
+        cardEventListeners.current.add(listener);
+        return () => { cardEventListeners.current.delete(listener); };
+    }, []);
 
     const [board, setBoard] = useState<Board | null>(null);
     const [lists, setLists] = useState<ListType[]>([]);
@@ -94,6 +106,7 @@ export function BoardPage() {
     }, [loadBoard]);
 
     const handleWsEvent = useCallback((event: WsEvent) => {
+        cardEventListeners.current.forEach((listener) => listener(event));
         switch (event.type) {
             case "board_edited":
                 setBoard((prev) => prev ? { ...prev, ...event.board } : prev);
@@ -158,6 +171,45 @@ export function BoardPage() {
                     next.delete(event.userId);
                     return next;
                 });
+                break;
+            // ── Events the board used to ignore ──────────────────────────────
+            case "card_assigned":
+                setLists((prev) => prev.map((l) => ({
+                    ...l,
+                    cards: l.cards.map((c) =>
+                        c.id === event.cardId && !(c.assignedTo ?? []).some((a) => a.userId === event.assignment.userId)
+                            ? { ...c, assignedTo: [...(c.assignedTo ?? []), event.assignment] }
+                            : c),
+                })));
+                break;
+            case "card_unassigned":
+                setLists((prev) => prev.map((l) => ({
+                    ...l,
+                    cards: l.cards.map((c) =>
+                        c.id === event.cardId ? { ...c, assignedTo: (c.assignedTo ?? []).filter((a) => a.userId !== event.userId) } : c),
+                })));
+                break;
+            case "member_added":
+                setBoard((prev) => prev && !prev.members.some((m) => m.memberId === event.member.memberId)
+                    ? { ...prev, members: [...prev.members, event.member] }
+                    : prev);
+                break;
+            case "member_role_updated":
+                setBoard((prev) => prev ? {
+                    ...prev,
+                    members: prev.members.map((m) => m.memberId === event.member.memberId ? { ...m, role: event.member.role } : m),
+                } : prev);
+                break;
+            case "member_removed":
+                // If *I* was removed, I no longer have access to this board
+                if (event.memberId === userIdRef.current) {
+                    navigate("/dashboard");
+                    break;
+                }
+                setBoard((prev) => prev ? { ...prev, members: prev.members.filter((m) => m.memberId !== event.memberId) } : prev);
+                break;
+            case "join_denied":
+                navigate("/dashboard");
                 break;
         }
     }, [navigate]);
@@ -748,6 +800,7 @@ export function BoardPage() {
                     onClose={() => setSelectedCardId(null)}
                     onCardUpdated={handleCardUpdated}
                     onCardDeleted={handleCardDeleted}
+                    subscribeCardEvents={subscribeCardEvents}
                 />
             )}
 
