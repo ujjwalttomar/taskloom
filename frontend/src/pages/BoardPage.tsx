@@ -218,96 +218,82 @@ export function BoardPage() {
 
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
-    const findListByCardId = (cardId: number) =>
-        lists.find((l) => l.cards.some((c) => c.id === cardId));
+    // dnd-kit ids are namespaced ("list-3", "card-3") so a list and a card with the same
+    // numeric id can't collide; the real numeric ids travel in `data`.
+    type DragData = { type?: "list" | "card"; listId?: number; cardId?: number } | undefined;
 
-    // Given an over.id, figure out which list it belongs to
-    // over.id could be: a list id, a "droppable-list-{id}", or a card id
-    const resolveTargetList = (overId: string | number, overData: Record<string, any> | null): ListType | undefined => {
-        // Droppable list container
-        if (overData?.type === "list") {
-            const listId = overData.listId ?? overId;
-            return lists.find((l) => l.id === listId);
-        }
-        // Card — find its parent list
-        if (overData?.type === "card") {
-            return findListByCardId(overId as number);
-        }
-        // Fallback: maybe overId is a list id directly
-        return lists.find((l) => l.id === overId);
+    const findListByCardId = (source: ListType[], cardId: number) =>
+        source.find((l) => l.cards.some((c) => c.id === cardId));
+
+    /** Which list is the pointer over: a list column, a list's card area, or a card inside a list? */
+    const resolveTargetList = (source: ListType[], data: DragData) => {
+        if (data?.type === "list") return source.find((l) => l.id === data.listId);
+        if (data?.type === "card" && data.cardId !== undefined) return findListByCardId(source, data.cardId);
+        return undefined;
     };
 
     // ─── DnD Handlers ───────────────────────────────────────────────────────────
 
     const handleDragStart = (event: DragStartEvent) => {
-        const { id, data } = event.active;
-        setListsSnapshot(lists); // snapshot for revert
-        if (data.current?.type === "list") setActiveListId(id as number);
-        if (data.current?.type === "card") setActiveCardId(id as number);
+        const data = event.active.data.current as DragData;
+        setListsSnapshot(lists); // restored if the drop fails or lands outside
+        if (data?.type === "list") setActiveListId(data.listId ?? null);
+        if (data?.type === "card") setActiveCardId(data.cardId ?? null);
     };
 
-    // onDragOver: optimistic move of card between lists while dragging
+    // While a card is dragged over ANOTHER list, move it there right away (optimistic preview)
     const handleDragOver = (event: DragOverEvent) => {
         const { active, over } = event;
-        if (!over || active.id === over.id) return;
-        if (active.data.current?.type !== "card") return;
+        const activeData = active.data.current as DragData;
+        if (!over || activeData?.type !== "card" || activeData.cardId === undefined) return;
+        const cardId = activeData.cardId;
+        const overData = over.data.current as DragData;
 
-        const activeCardIdNum = active.id as number;
-        const overList = resolveTargetList(over.id, over.data.current as any);
-        const sourceList = findListByCardId(activeCardIdNum);
-
-        if (!sourceList || !overList || sourceList.id === overList.id) return;
-
-        // Move card optimistically to the target list
-        const card = sourceList.cards.find((c) => c.id === activeCardIdNum)!;
-        setLists((prev) => prev.map((l) => {
-            if (l.id === sourceList.id) return { ...l, cards: l.cards.filter((c) => c.id !== activeCardIdNum) };
-            if (l.id === overList.id) {
-                // Insert card at correct position
-                const overCardIdx = l.cards.findIndex((c) => c.id === over.id);
-                const newCards = [...l.cards];
-                const insertIdx = overCardIdx >= 0 ? overCardIdx : newCards.length;
-                newCards.splice(insertIdx, 0, { ...card, listId: overList.id });
-                return { ...l, cards: newCards };
-            }
-            return l;
-        }));
+        setLists((prev) => {
+            const source = findListByCardId(prev, cardId);
+            const target = resolveTargetList(prev, overData);
+            if (!source || !target || source.id === target.id) return prev;
+            const card = source.cards.find((c) => c.id === cardId)!;
+            return prev.map((l) => {
+                if (l.id === source.id) return { ...l, cards: l.cards.filter((c) => c.id !== cardId) };
+                if (l.id === target.id) {
+                    const overIdx = overData?.type === "card" ? l.cards.findIndex((c) => c.id === overData.cardId) : -1;
+                    const cards = [...l.cards];
+                    cards.splice(overIdx >= 0 ? overIdx : cards.length, 0, { ...card, listId: target.id });
+                    return { ...l, cards };
+                }
+                return l;
+            });
+        });
     };
 
     const handleDragEnd = async (event: DragEndEvent) => {
         const { active, over } = event;
+        const activeData = active.data.current as DragData;
+        const overData = over?.data.current as DragData;
         setActiveListId(null);
         setActiveCardId(null);
         if (!over) {
-            // Dropped outside — revert to snapshot
-            setLists(listsSnapshot);
+            setLists(listsSnapshot); // dropped outside — undo the preview
             return;
         }
 
         // ── List reorder ────────────────────────────────────────────────────────
-        if (active.data.current?.type === "list") {
-            if (active.id === over.id) return;
-            // over might be a list or a droppable-list-* id; normalise to list id
-            const overListId = (over.data.current?.type === "list" && over.data.current?.listId)
-                ? over.data.current.listId
-                : over.id;
-
-            const oldIndex = lists.findIndex((l) => l.id === active.id);
-            const newIndex = lists.findIndex((l) => l.id === overListId);
-            if (oldIndex === -1 || newIndex === -1) return;
+        if (activeData?.type === "list") {
+            const target = resolveTargetList(lists, overData); // over a list, its card area, or one of its cards
+            const oldIndex = lists.findIndex((l) => l.id === activeData.listId);
+            const newIndex = target ? lists.findIndex((l) => l.id === target.id) : -1;
+            if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
 
             const reordered = arrayMove(lists, oldIndex, newIndex);
             setLists(reordered);
-
-            const movedList = reordered[newIndex]!;
-            const afterList = newIndex > 0 ? reordered[newIndex - 1] : undefined;
-            const beforeList = newIndex < reordered.length - 1 ? reordered[newIndex + 1] : undefined;
-
+            const moved = reordered[newIndex]!;
             try {
-                await api.lists.reorder(boardId, movedList.id, {
-                    afterListId: afterList?.id,
-                    beforeListId: beforeList?.id,
+                const { list } = await api.lists.reorder(boardId, moved.id, {
+                    afterListId: reordered[newIndex - 1]?.id,
+                    beforeListId: reordered[newIndex + 1]?.id,
                 });
+                setLists((prev) => prev.map((l) => (l.id === list.id ? { ...l, order: list.order } : l)));
             } catch {
                 setLists(listsSnapshot);
             }
@@ -315,48 +301,60 @@ export function BoardPage() {
         }
 
         // ── Card move / reorder ─────────────────────────────────────────────────
-        if (active.data.current?.type === "card") {
-            const cardId = active.id as number;
+        if (activeData?.type !== "card" || activeData.cardId === undefined) return;
+        const cardId = activeData.cardId;
+        const current = findListByCardId(lists, cardId); // where it is now (after any cross-list preview)
+        const target = resolveTargetList(lists, overData);
+        if (!current || !target) {
+            setLists(listsSnapshot);
+            return;
+        }
+        const card = current.cards.find((c) => c.id === cardId)!;
 
-            // Find where the card currently is (after optimistic moves in handleDragOver)
-            const currentList = lists.find((l) => l.cards.some((c) => c.id === cardId));
-            if (!currentList) {
-                setLists(listsSnapshot);
-                return;
-            }
+        // 1. Work out the FINAL order of the target list first. Same rule as dnd-kit's sortable
+        //    animation: dropping on a card takes that card's slot (so moving down lands after it).
+        let finalCards: Card[];
+        if (current.id === target.id && overData?.type === "card") {
+            const from = target.cards.findIndex((c) => c.id === cardId);
+            const to = target.cards.findIndex((c) => c.id === overData.cardId);
+            finalCards = arrayMove(target.cards, from, to);
+        } else if (overData?.type === "card") {
+            const rest = target.cards.filter((c) => c.id !== cardId);
+            const at = rest.findIndex((c) => c.id === overData.cardId);
+            finalCards = [...rest.slice(0, at), { ...card, listId: target.id }, ...rest.slice(at)];
+        } else {
+            // Dropped on the list area: keep the preview position, or append if it isn't there yet
+            finalCards = current.id === target.id
+                ? target.cards
+                : [...target.cards.filter((c) => c.id !== cardId), { ...card, listId: target.id }];
+        }
 
-            // Determine target list and neighbouring cards
-            const overList = resolveTargetList(over.id, over.data.current as any);
-            if (!overList) {
-                setLists(listsSnapshot);
-                return;
-            }
+        // Nothing actually moved → no request
+        const original = findListByCardId(listsSnapshot, cardId);
+        if (original?.id === target.id &&
+            original.cards.map((c) => c.id).join() === finalCards.map((c) => c.id).join()) {
+            setLists(listsSnapshot);
+            return;
+        }
 
-            let afterCardId: number | undefined;
-            let beforeCardId: number | undefined;
+        // 2. Show it, then 3. derive the neighbours from the final order (never the card itself)
+        const index = finalCards.findIndex((c) => c.id === cardId);
+        setLists((prev) => prev.map((l) =>
+            l.id === target.id ? { ...l, cards: finalCards } : { ...l, cards: l.cards.filter((c) => c.id !== cardId) }));
 
-            if (over.data.current?.type === "card" && over.id !== cardId) {
-                const overCardIdx = overList.cards.findIndex((c) => c.id === over.id);
-                if (overCardIdx >= 0) {
-                    // Insert before this card
-                    beforeCardId = over.id as number;
-                    afterCardId = overCardIdx > 0 ? overList.cards[overCardIdx - 1]!.id : undefined;
-                }
-            } else {
-                // Dropped on list itself — append at end
-                const cards = overList.cards.filter((c) => c.id !== cardId);
-                afterCardId = cards.length > 0 ? cards[cards.length - 1]!.id : undefined;
-            }
-
-            try {
-                await api.cards.move(cardId, {
-                    targetListId: overList.id,
-                    afterCardId,
-                    beforeCardId,
-                });
-            } catch {
-                setLists(listsSnapshot);
-            }
+        try {
+            const { card: saved } = await api.cards.move(cardId, {
+                targetListId: target.id,
+                afterCardId: finalCards[index - 1]?.id,
+                beforeCardId: finalCards[index + 1]?.id,
+            });
+            // Keep the server's order value so the next move computes from the same numbers
+            setLists((prev) => prev.map((l) => ({
+                ...l,
+                cards: l.cards.map((c) => (c.id === cardId ? { ...c, order: saved.order, listId: saved.listId } : c)),
+            })));
+        } catch {
+            setLists(listsSnapshot);
         }
     };
 
@@ -710,7 +708,7 @@ export function BoardPage() {
                     {/* Inner row — inline-flex so it sizes to content and lets the outer div scroll */}
                     <div className="inline-flex gap-4 h-full pt-5 px-5 pb-5 items-start">
                         <SortableContext
-                            items={lists.map((l) => l.id)}
+                            items={lists.map((l) => `list-${l.id}`)}
                             strategy={horizontalListSortingStrategy}
                         >
                             {lists.map((list) => (

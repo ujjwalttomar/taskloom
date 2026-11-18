@@ -9,8 +9,8 @@ import type { List as ListType, Card as CardType } from "../types";
 
 function SortableCard({ card, onClick }: { card: CardType; onClick: () => void }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-        id: card.id,
-        data: { type: "card", card },
+        id: `card-${card.id}`, // namespaced: list and card ids must never collide in one DndContext
+        data: { type: "card", cardId: card.id, card },
     });
 
     const style = {
@@ -82,8 +82,8 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
         transform,
         transition,
     } = useSortable({
-        id: list.id,
-        data: { type: "list", list },
+        id: `list-${list.id}`,
+        data: { type: "list", listId: list.id, list },
     });
 
     // Make the cards container droppable so cards can be dropped into this list
@@ -215,7 +215,7 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
             {/* Cards — droppable + sortable */}
             <div ref={setDropRef} className="flex flex-col gap-2 px-3 overflow-y-auto flex-1 pb-2 min-h-[8px]">
                 <SortableContext
-                    items={list.cards.map((c) => c.id)}
+                    items={list.cards.map((c) => `card-${c.id}`)}
                     strategy={verticalListSortingStrategy}
                 >
                     {list.cards.map((card) => (
