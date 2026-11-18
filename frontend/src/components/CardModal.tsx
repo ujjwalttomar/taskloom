@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api/client";
-import type { Card, Comment, BoardMember, WsEvent } from "../types";
+import type { Card, Comment, BoardMember, AssignedCard, WsEvent } from "../types";
 
 interface CardModalProps {
     cardId: number;
@@ -9,15 +9,19 @@ interface CardModalProps {
     onClose: () => void;
     onCardUpdated: (card: Card) => void;
     onCardDeleted: (cardId: number) => void;
+    /** Board members (already loaded by BoardPage) — used for the assignee chips */
+    boardMembers: BoardMember[];
+    /** Tell the board when assignees change, so the avatars on the card update too */
+    onAssigneesChanged: (cardId: number, assignedTo: AssignedCard[]) => void;
     /** Live events from the board's WebSocket; returns an unsubscribe function */
     subscribeCardEvents?: (listener: (event: WsEvent) => void) => () => void;
 }
 
-export function CardModal({ cardId, boardId, onClose, onCardUpdated, onCardDeleted, subscribeCardEvents }: CardModalProps) {
+export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, boardMembers, onAssigneesChanged, subscribeCardEvents }: CardModalProps) {
     const { user } = useAuth();
     const [card, setCard] = useState<Card | null>(null);
-    const [boardMembers, setBoardMembers] = useState<BoardMember[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState("");
 
     const [editingTitle, setEditingTitle] = useState(false);
     const [titleValue, setTitleValue] = useState("");
@@ -31,18 +35,17 @@ export function CardModal({ cardId, boardId, onClose, onCardUpdated, onCardDelet
 
     const [assignLoading, setAssignLoading] = useState<number | null>(null);
 
+    // Only the card is fetched — members come from the board (this used to refetch the whole board)
     useEffect(() => {
-        Promise.all([
-            api.cards.getOne(cardId),
-            api.boards.getOne(boardId),
-        ]).then(([cardData, boardData]) => {
-            setCard(cardData.card);
-            setTitleValue(cardData.card.title);
-            setDescValue(cardData.card.description || "");
-            setBoardMembers(boardData.board.members ?? []);
-            setLoading(false);
-        });
-    }, [cardId, boardId]);
+        api.cards.getOne(cardId)
+            .then((data) => {
+                setCard(data.card);
+                setTitleValue(data.card.title);
+                setDescValue(data.card.description || "");
+            })
+            .catch((e) => setLoadError(e.message || "Couldn't load this card")) // was: spinner forever
+            .finally(() => setLoading(false));
+    }, [cardId]);
 
     // Keep the open card in sync with what other people do to it (comments, assignees, edits)
     useEffect(() => {
@@ -89,15 +92,16 @@ export function CardModal({ cardId, boardId, onClose, onCardUpdated, onCardDelet
             return;
         }
         const data = await api.cards.update(cardId, { title: titleValue.trim() });
-        setCard(data.card);
+        // Merge: the PATCH response has no comments/assignees/creator — replacing wiped them from the modal
+        setCard((prev) => (prev ? { ...prev, ...data.card } : prev));
         onCardUpdated(data.card);
         setEditingTitle(false);
     };
 
     const handleSaveDesc = async () => {
         if (!card) return;
-        const data = await api.cards.update(cardId, { title: card.title, description: descValue });
-        setCard(data.card);
+        const data = await api.cards.update(cardId, { description: descValue });
+        setCard((prev) => (prev ? { ...prev, ...data.card } : prev));
         onCardUpdated(data.card);
         setEditingDesc(false);
     };
@@ -144,19 +148,16 @@ export function CardModal({ cardId, boardId, onClose, onCardUpdated, onCardDelet
         const isAssigned = (card.assignedTo ?? []).some((a) => a.userId === memberId);
         setAssignLoading(memberId);
         try {
+            let assignedTo: AssignedCard[];
             if (isAssigned) {
                 await api.cards.unassign(cardId, memberId);
-                setCard((prev) => prev ? {
-                    ...prev,
-                    assignedTo: prev.assignedTo?.filter((a) => a.userId !== memberId),
-                } : prev);
+                assignedTo = (card.assignedTo ?? []).filter((a) => a.userId !== memberId);
             } else {
                 const data = await api.cards.assign(cardId, memberId);
-                setCard((prev) => prev ? {
-                    ...prev,
-                    assignedTo: [...(prev.assignedTo ?? []), data.assignment],
-                } : prev);
+                assignedTo = [...(card.assignedTo ?? []), data.assignment];
             }
+            setCard((prev) => (prev ? { ...prev, assignedTo } : prev));
+            onAssigneesChanged(cardId, assignedTo); // so the avatars on the board card update too
         } catch (e: any) {
             alert(e.message || "Failed");
         } finally {
@@ -178,7 +179,12 @@ export function CardModal({ cardId, boardId, onClose, onCardUpdated, onCardDelet
                     <div className="flex items-center justify-center py-16">
                         <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                     </div>
-                ) : !card ? null : (
+                ) : !card ? (
+                    <div className="p-8 text-center">
+                        <p className="text-red-400 text-sm mb-3">{loadError || "Card not found"}</p>
+                        <button onClick={onClose} className="text-slate-400 hover:text-white text-sm">Close</button>
+                    </div>
+                ) : (
                     <>
                         {/* Header */}
                         <div className="p-6 pb-0">

@@ -376,6 +376,13 @@ export function BoardPage() {
         ));
     };
 
+    const handleAssigneesChanged = (cardId: number, assignedTo: Card["assignedTo"]) => {
+        setLists((prev) => prev.map((l) => ({
+            ...l,
+            cards: l.cards.map((c) => (c.id === cardId ? { ...c, assignedTo } : c)),
+        })));
+    };
+
     const handleCardUpdated = (updated: Card) => {
         setLists((prev) => prev.map((l) => ({
             ...l,
@@ -798,6 +805,8 @@ export function BoardPage() {
                     onClose={() => setSelectedCardId(null)}
                     onCardUpdated={handleCardUpdated}
                     onCardDeleted={handleCardDeleted}
+                    boardMembers={board?.members ?? []}
+                    onAssigneesChanged={handleAssigneesChanged}
                     subscribeCardEvents={subscribeCardEvents}
                 />
             )}
