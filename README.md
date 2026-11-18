@@ -141,7 +141,7 @@ cd frontend       && npm run dev     # App       → http://localhost:5173
 
 | Where | What | How to run |
 |---|---|---|
-| `backend/server/tests/` | **84 integration and unit tests** through the real Express app and a real Postgres database. They cover permissions, every role rule, the OAuth callback, refresh tokens, invites, card ordering and rate limits. | `cd backend/server && npm test` |
+| `backend/server/tests/` | **96 integration and unit tests** through the real Express app and a real Postgres database. They cover permissions, every role rule, the OAuth callback, refresh tokens, invites, card ordering and rate limits. | `cd backend/server && npm test` |
 | `frontend/src/api/client.test.ts` | **10 tests** for the API client: one shared token refresh, session expiry, error messages | `cd frontend && npm test` |
 
 The backend tests need their **own** database. Copy `backend/server/.env.test.example` to `.env.test` and point it at a local database whose name ends in `_test`. The test config refuses to run against anything else, so the tests can't touch Supabase or your dev data. The tables are created automatically, and nothing is ever deleted.
@@ -156,16 +156,19 @@ Redis, email and Google's code exchange are mocked. Everything else, including t
 |---|---|
 | Create a workspace | any signed-in user (they become its admin) |
 | Rename/delete a workspace, invite people, change roles, remove members | workspace **admin** |
+| Join a workspace | only by **accepting an invite** (new users sign up with Google on the way) |
+| Leave a workspace | any member, except the last admin |
 | Create a board | any workspace member (they become its admin) |
-| Open a board, add/rename lists, create/edit/move cards, comment | board **member** |
-| Rename/delete a board, add/remove board members, change board roles, delete lists | board **admin** |
+| Open a board, add/rename lists, create/edit/move cards, comment | board **member**, or any workspace admin |
+| Rename/delete a board, add/remove board members, change board roles, delete lists | board **admin**, or any workspace admin |
 | Assign / unassign a card | yourself; board admins can do it for anyone |
 | Edit a comment | its author |
 | Delete a comment | its author or a board admin |
 
 Two more rules:
 - The last admin of a workspace or board can't be demoted or removed.
-- Removing someone from a workspace also removes them from all of its boards.
+- Removing someone from a workspace (or them leaving) also removes them from all of its boards.
+- **Workspace admins are board admins on every board in their workspace,** without being added to it. That access follows their workspace role, so a demotion takes it away immediately.
 
 ---
 
@@ -196,7 +199,8 @@ All endpoints except auth and invite details are under `/api` and require login 
 | PATCH / DELETE | `/api/workspaces/:workspaceId` | admin |
 | PATCH / DELETE | `/api/workspaces/:workspaceId/members/:memberId` | admin |
 | GET | `/api/workspaces/:workspaceId/members/:memberId/profile` | workspace admin |
-| POST | `/api/workspaces/:workspaceId/invites` | admin (`{ email, role? }`: existing users are added directly, everyone else gets an invite link) |
+| POST | `/api/workspaces/:workspaceId/invites` | admin (`{ email, role? }`): emails an invite and returns the link. **Everyone joins by accepting an invite**, existing users too |
+| POST | `/api/workspaces/:workspaceId/leave` | member (not the last admin) |
 | GET | `/api/invites/:token` | public (the token is the secret) |
 | POST | `/api/invites/:token/accept` | login, with the invited email |
 </details>
