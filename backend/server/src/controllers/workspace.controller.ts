@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import {
     CreateWorkspaceSchema,
     EditWorkspaceSchema,
-    AddWorkspaceMemberSchema,
     UpdateWorkspaceMemberRoleSchema,
 } from "../schemas/workspace.schemas";
 import * as workspaceService from "../services/workspace.service";
@@ -62,21 +61,6 @@ export const deleteWorkspace = async (req: Request, res: Response) => {
         const workspaceId = parseInt(req.params["workspaceId"] as string);
         await workspaceService.deleteWorkspace(workspaceId);
         return res.status(200).json({ message: "Workspace deleted" });
-    } catch (error) {
-        return handleError(res, error);
-    }
-};
-
-export const addMembers = async (req: Request, res: Response) => {
-    try {
-        const parsed = AddWorkspaceMemberSchema.safeParse({ body: req.body });
-        if (!parsed.success) return res.status(400).json({ message: firstIssue(parsed.error) });
-
-        const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const { email, role } = parsed.data.body;
-        const memberRole = role === "ADMIN" ? "ADMIN" : "EMPLOYEE";
-        const member = await workspaceService.addMember(workspaceId, email, memberRole);
-        return res.status(201).json({ message: "Member added", member });
     } catch (error) {
         return handleError(res, error);
     }

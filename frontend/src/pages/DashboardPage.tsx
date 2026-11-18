@@ -126,26 +126,18 @@ export function DashboardPage() {
         // Show "server starting up" hint after 3 seconds
         slowTimerRef.current = setTimeout(() => setAddSlow(true), 3000);
         try {
-            // One request handles everything:
-            // - user exists on Taskloom → added directly (201 "Member added")
-            // - user not on Taskloom → invite link created (200 "Invite sent")
+            // Everyone gets an invite, existing Taskloom users too: they join when they accept.
+            // The link comes back as well, for when email isn't set up (or just to send it yourself).
             const res = await api.invites.send(selectedWorkspace.id, {
                 email: addEmail.trim(),
                 role: addRole,
             });
-            if (res.inviteUrl) {
-                // Not on Taskloom yet — show copyable invite link
-                setAddMsg(`Invite link created for ${addEmail.trim()} — share it with them:`);
-                setInviteLink(res.inviteUrl);
-            } else {
-                // Already on Taskloom — added directly
-                setAddMsg("Member added!");
-                await refreshWorkspaces();
-            }
+            setAddMsg(`Invite sent to ${addEmail.trim()}. They'll join once they accept. You can also share the link yourself:`);
+            setInviteLink(res.inviteUrl ?? null);
             setAddMsgType("success");
             setAddEmail("");
         } catch (e: any) {
-            setAddMsg(e.message || "Failed to add member");
+            setAddMsg(e.message || "Failed to send the invite");
             setAddMsgType("error");
         } finally {
             if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
@@ -506,12 +498,12 @@ export function DashboardPage() {
                         {/* Members tab */}
                         {tab === "members" && (
                             <div className="max-w-2xl">
-                                {/* Unified add / invite — only admins see this */}
+                                {/* Invite a member (admins only). Everyone joins by accepting an invite */}
                                 {isCurrentUserAdmin && (
                                     <div className="bg-surface border border-border rounded-xl p-4 mb-6">
-                                        <p className="text-white text-sm font-medium mb-0.5">Add member</p>
+                                        <p className="text-white text-sm font-medium mb-0.5">Invite member</p>
                                         <p className="text-slate-500 text-xs mb-3">
-                                            Enter their email. If they're on Taskloom they'll be added instantly — otherwise they'll get an invite link.
+                                            Enter their email. They'll get an invite to join (new to Taskloom? They'll sign up with Google first).
                                         </p>
                                         <div className="flex gap-2">
                                             <input
@@ -541,9 +533,9 @@ export function DashboardPage() {
                                                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                                                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                                                         </svg>
-                                                        Adding
+                                                        Sending
                                                     </span>
-                                                ) : "Add"}
+                                                ) : "Invite"}
                                             </button>
                                         </div>
                                         {addSlow && (

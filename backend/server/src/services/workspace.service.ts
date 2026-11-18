@@ -1,5 +1,4 @@
 import * as repo from "../repositories/workspace.repository";
-import * as userRepo from "../repositories/user.repository";
 import { AppError } from "../utils/AppError";
 import { publishBoardEvent } from "../redis";
 
@@ -23,16 +22,6 @@ export async function editWorkspace(workspaceId: number, data: { name?: string; 
 
 export async function deleteWorkspace(workspaceId: number) {
     return repo.deleteWorkspace(workspaceId);
-}
-
-export async function addMember(workspaceId: number, email: string, role: "ADMIN" | "EMPLOYEE") {
-    const user = await userRepo.findUserByEmail(email);
-    if (!user) throw new AppError(404, "User not found");
-
-    const existing = await repo.findWorkspaceMember(workspaceId, user.id);
-    if (existing) throw new AppError(409, "Already a member");
-
-    return repo.createWorkspaceMember(workspaceId, user.id, role);
 }
 
 /** Throws if this change would leave the workspace with no admin at all. */

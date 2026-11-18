@@ -1,12 +1,16 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
 export function InvitePage() {
     const { token } = useParams<{ token: string }>();
-    const { user } = useAuth();
+    const { user, loading: authLoading, logout } = useAuth();
     const navigate = useNavigate();
+    // Set when the person clicked "Sign in to accept": coming back from Google login, they join straight away
+    const [searchParams] = useSearchParams();
+    const autoAccept = searchParams.get("autoAccept") === "1";
+    const autoAcceptTried = useRef(false);
 
     const [details, setDetails] = useState<{
         workspace: { name: string; description?: string };
@@ -27,6 +31,15 @@ export function InvitePage() {
             .finally(() => setLoading(false));
     }, [token]);
 
+    // Sign in (or switch account), then come back here and join automatically
+    const signInAndAccept = () =>
+        navigate(`/?returnTo=${encodeURIComponent(`/invite/${token}?autoAccept=1`)}`);
+
+    const switchAccount = async () => {
+        await logout();
+        signInAndAccept(); // Google shows its account picker (prompt=select_account)
+    };
+
     const handleAccept = async () => {
         if (!token) return;
         setAccepting(true);
@@ -40,6 +53,14 @@ export function InvitePage() {
             setAccepting(false);
         }
     };
+
+    const emailMatches = !!user && !!details && user.email.toLowerCase() === details.email.toLowerCase();
+    useEffect(() => {
+        if (autoAccept && emailMatches && !autoAcceptTried.current) {
+            autoAcceptTried.current = true; // once: a failure shows its error instead of retrying
+            void handleAccept();
+        }
+    });
 
     return (
         <div className="min-h-screen bg-bg flex items-center justify-center p-4">
@@ -55,13 +76,13 @@ export function InvitePage() {
                     <span className="text-white font-semibold text-sm">Taskloom</span>
                 </div>
 
-                {loading && (
+                {(loading || authLoading) && (
                     <div className="flex justify-center py-8">
                         <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                     </div>
                 )}
 
-                {!loading && error && (
+                {!loading && !authLoading && error && (
                     <div className="text-center">
                         <p className="text-red-400 text-sm mb-4">{error}</p>
                         <button
@@ -73,7 +94,7 @@ export function InvitePage() {
                     </div>
                 )}
 
-                {!loading && !error && details && !accepted && (
+                {!loading && !authLoading && !error && details && !accepted && (
                     <>
                         <h2 className="text-white text-lg font-semibold mb-1">
                             You're invited!
@@ -105,22 +126,29 @@ export function InvitePage() {
                                 <p className="text-slate-400 text-sm mb-4">
                                     Sign in with the invited email to accept.
                                 </p>
-                                {/* returnTo is carried through Google login, so the user lands back on this invite */}
+                                {/* returnTo is carried through Google login (new users sign up there), and
+                                    autoAccept joins them as soon as they're back, so one click is enough */}
                                 <button
-                                    onClick={() => navigate(`/?returnTo=${encodeURIComponent(`/invite/${token}`)}`)}
+                                    onClick={signInAndAccept}
                                     className="w-full bg-accent hover:bg-accent-hover text-white px-4 py-3 rounded-xl text-sm font-medium transition-colors"
                                 >
                                     Sign in to accept
                                 </button>
                             </div>
-                        ) : user.email.toLowerCase() !== details.email.toLowerCase() ? (
+                        ) : !emailMatches ? (
                             <div className="text-center">
                                 <p className="text-red-400 text-sm mb-2">
                                     This invite was sent to <strong>{details.email}</strong>.
                                 </p>
-                                <p className="text-slate-500 text-xs">
-                                    You're signed in as {user.email}. Sign in with the correct account to accept.
+                                <p className="text-slate-500 text-xs mb-4">
+                                    You're signed in as {user.email}. Sign in with the invited account to accept.
                                 </p>
+                                <button
+                                    onClick={switchAccount}
+                                    className="w-full bg-elevated hover:bg-border text-white px-4 py-3 rounded-xl text-sm font-medium transition-colors"
+                                >
+                                    Use a different Google account
+                                </button>
                             </div>
                         ) : (
                             <button

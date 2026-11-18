@@ -25,6 +25,14 @@ export function as(user: { id: number }) {
     };
 }
 
+/** The only way into a workspace: an admin invites, the person accepts. Returns the invite token. */
+export async function joinWorkspace(admin: { id: number }, workspaceId: number, user: { id: number; email: string }, role?: "ADMIN" | "EMPLOYEE") {
+    const res = await as(admin).post(`/api/workspaces/${workspaceId}/invites`, { email: user.email, role }).expect(200);
+    const token = res.body.inviteUrl.split("/invite/")[1] as string;
+    await as(user).post(`/api/invites/${token}/accept`).expect(200);
+    return token;
+}
+
 /** Requests with no cookie at all. */
 export const anon = () => request(app);
 
@@ -39,8 +47,7 @@ export async function createBoardFixture() {
     const [admin, employee, outsider] = await Promise.all([createUser("Admin"), createUser("Employee"), createUser("Outsider")]);
 
     const workspace = (await as(admin).post("/api/workspaces", { name: "Team" }).expect(201)).body.workspace;
-    // An existing user is added straight to the workspace by the invite endpoint
-    await as(admin).post(`/api/workspaces/${workspace.id}/invites`, { email: employee.email }).expect(201);
+    await joinWorkspace(admin, workspace.id, employee);
     const board = (await as(admin).post(`/api/workspaces/${workspace.id}/boards`, { title: "Roadmap" }).expect(201)).body.board;
     await as(admin).post(`/api/boards/${board.id}/members`, { email: employee.email }).expect(201);
 

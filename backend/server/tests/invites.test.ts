@@ -1,13 +1,35 @@
 import { describe, it, expect } from "vitest";
-import { as, anon, createUser, createBoardFixture, prisma } from "./helpers";
+import { as, anon, createUser, createBoardFixture, joinWorkspace, prisma } from "./helpers";
 import { sendEmail } from "../src/utils/sendEmail";
 
 describe("sending invites (M10)", () => {
-    it("an existing user is matched case-insensitively and added directly", async () => {
+    it("an existing Taskloom user gets an invite too, and only joins after accepting (consent)", async () => {
         const { workspace, admin } = await createBoardFixture();
         const bob = await createUser("Bob");
-        await as(admin).post(`/api/workspaces/${workspace.id}/invites`, { email: `  ${bob.email.toUpperCase()} ` }).expect(201);
+        const res = await as(admin).post(`/api/workspaces/${workspace.id}/invites`, { email: `  ${bob.email.toUpperCase()} ` }).expect(200);
+        expect(res.body.inviteUrl).toMatch(/\/invite\/[0-9a-f]{64}$/);
+        expect(sendEmail).toHaveBeenCalledWith(bob.email, expect.any(String), expect.any(String));
+        const isMember = () => prisma.workspaceMember.findUnique({ where: { workspaceId_memberId: { workspaceId: workspace.id, memberId: bob.id } } });
+        expect(await isMember()).toBeNull();                       // NOT added yet
+
+        const token = res.body.inviteUrl.split("/invite/")[1];
+        await as(bob).post(`/api/invites/${token}/accept`).expect(200);
+        expect((await isMember())?.role).toBe("EMPLOYEE");
         await as(admin).post(`/api/workspaces/${workspace.id}/invites`, { email: bob.email }).expect(409); // already a member
+    });
+
+    it("there is no way to add someone without an invite (the direct-add endpoint is gone)", async () => {
+        const { workspace, admin } = await createBoardFixture();
+        const bob = await createUser("Bob");
+        await as(admin).post(`/api/workspaces/${workspace.id}/members`, { email: bob.email }).expect(404);
+    });
+
+    it("the invited role is the role you get", async () => {
+        const { workspace, admin } = await createBoardFixture();
+        const carol = await createUser("Carol");
+        await joinWorkspace(admin, workspace.id, carol, "ADMIN");
+        const m = await prisma.workspaceMember.findUnique({ where: { workspaceId_memberId: { workspaceId: workspace.id, memberId: carol.id } } });
+        expect(m?.role).toBe("ADMIN");
     });
 
     it("a new email gets an invite link, stored lower-cased, and an email is sent", async () => {
@@ -15,7 +37,7 @@ describe("sending invites (M10)", () => {
         const email = `New.Person-${Date.now()}@Example.COM`;
         const res = await as(admin).post(`/api/workspaces/${workspace.id}/invites`, { email }).expect(200);
         expect(res.body.inviteUrl).toMatch(/^http:\/\/localhost:5173\/invite\/[0-9a-f]{64}$/);
-        const invite = await prisma.workspaceInvite.findFirst({ where: { workspaceId: workspace.id } });
+        const invite = await prisma.workspaceInvite.findFirst({ where: { workspaceId: workspace.id, email: email.toLowerCase() } });
         expect(invite?.email).toBe(email.toLowerCase());
         expect(sendEmail).toHaveBeenCalledWith(email.toLowerCase(), expect.stringContaining("Team"), expect.any(String));
     });

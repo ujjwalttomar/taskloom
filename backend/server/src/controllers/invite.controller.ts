@@ -17,12 +17,9 @@ export const sendInvite = async (req: Request, res: Response) => {
         const { email, role } = parsed.data.body;
         const memberRole = role === "ADMIN" ? "ADMIN" : "EMPLOYEE";
 
-        const result = await inviteService.sendInvite(workspaceId, email, memberRole);
-
-        if (result.direct) {
-            return res.status(201).json({ message: "Member added" });
-        }
-        return res.status(200).json({ message: "Invite sent", inviteUrl: result.inviteUrl });
+        const { inviteUrl } = await inviteService.sendInvite(workspaceId, email, memberRole);
+        // The link is returned too, so the admin can share it when email isn't set up
+        return res.status(200).json({ message: "Invite sent", inviteUrl });
     } catch (error) {
         return handleError(res, error);
     }

@@ -9,16 +9,14 @@ export async function sendInvite(workspaceId: number, email: string, role: "ADMI
     const workspace = await repo.findWorkspace(workspaceId);
     if (!workspace) throw new AppError(404, "Workspace not found");
 
-    // If user already exists on Taskloom, add them directly — no invite needed
+    // Everyone joins by accepting an invite, existing Taskloom users included: nobody is
+    // added to a workspace without saying yes. (Existing users used to be added directly.)
     const existingUser = await userRepo.findUserByEmail(email);
-    if (existingUser) {
-        const alreadyMember = await repo.findWorkspaceMember(workspaceId, existingUser.id);
-        if (alreadyMember) throw new AppError(409, "User is already a member");
-        await repo.createWorkspaceMember(workspaceId, existingUser.id, role);
-        return { direct: true as const };
+    if (existingUser && await repo.findWorkspaceMember(workspaceId, existingUser.id)) {
+        throw new AppError(409, "User is already a member");
     }
 
-    // User not on Taskloom — create an invite link
+    // A re-invite replaces the previous link
     await repo.deletePendingInvites(workspaceId, email);
 
     const token = crypto.randomBytes(32).toString("hex");
@@ -35,7 +33,7 @@ export async function sendInvite(workspaceId: number, email: string, role: "ADMI
     sendEmail(email, subject, html)
         .catch((err) => console.error("Email send failed:", JSON.stringify(err?.message || err)));
 
-    return { direct: false as const, inviteUrl };
+    return { inviteUrl };
 }
 
 export async function getInviteDetails(token: string) {

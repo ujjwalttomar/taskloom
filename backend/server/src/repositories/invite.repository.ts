@@ -31,9 +31,6 @@ export const findWorkspaceMember = (workspaceId: number, memberId: number) =>
         where: { workspaceId_memberId: { workspaceId, memberId } },
     });
 
-export const createWorkspaceMember = (workspaceId: number, memberId: number, role: "ADMIN" | "EMPLOYEE") =>
-    prisma.workspaceMember.create({ data: { workspaceId, memberId, role } });
-
 export const acceptInviteTransaction = (workspaceId: number, memberId: number, role: "ADMIN" | "EMPLOYEE", token: string) =>
     prisma.$transaction([
         prisma.workspaceMember.create({ data: { workspaceId, memberId, role } }),
