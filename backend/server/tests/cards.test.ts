@@ -92,3 +92,17 @@ describe("cards: access and validation", () => {
         expect((await prisma.card.findUnique({ where: { id: a!.id } }))?.title).toBe("A");
     });
 });
+
+describe("cards: user data in payloads (L1)", () => {
+    it("the card, its creator, comment creators and assignees expose only id / name / email", async () => {
+        const { admin, employee, cards: [a] } = await createBoardFixture();
+        await as(employee).post(`/api/cards/${a!.id}/assign`, { userId: employee.id }).expect(201);
+        const created = (await as(employee).post(`/api/cards/${a!.id}/comments`, { text: "hi" }).expect(201)).body.comment;
+
+        const card = (await as(admin).get(`/api/cards/${a!.id}`).expect(200)).body.card;
+        const comments = (await as(admin).get(`/api/cards/${a!.id}/comments`).expect(200)).body.comments;
+        const users = [card.creator, card.comments[0].creator, card.assignedTo[0].user, comments[0].creator, created.creator];
+        for (const u of users) expect(Object.keys(u).sort()).toEqual(["email", "id", "name"]); // no googleId, no timestamps
+    });
+});
+

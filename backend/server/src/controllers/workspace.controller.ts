@@ -24,7 +24,7 @@ export const getAllWorkspaces = async (req: Request, res: Response) => {
 export const getSpecificWorkspace = async (req: Request, res: Response) => {
     try {
         const workspaceId = parseInt(req.params["workspaceId"] as string);
-        const workspace = await workspaceService.getWorkspace(workspaceId);
+        const workspace = await workspaceService.getWorkspace(workspaceId, req.userId!);
         return res.status(200).json({ workspace });
     } catch (error) {
         return handleError(res, error);

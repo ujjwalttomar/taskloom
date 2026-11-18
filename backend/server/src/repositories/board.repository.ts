@@ -1,7 +1,5 @@
 import prisma from "../../../shared/db/client";
-
-// Only the user fields the UI needs (no googleId / timestamps sent to every member)
-const publicUser = { select: { id: true, name: true, email: true } } as const;
+import { publicUser } from "./select";
 
 export const findAllBoardsForUser = (workspaceId: number, userId: number) =>
     prisma.board.findMany({
@@ -54,7 +52,7 @@ export const findBoardMember = (boardId: number, memberId: number) =>
 export const createBoardMember = (boardId: number, memberId: number, role: "ADMIN" | "EMPLOYEE") =>
     prisma.boardMember.create({
         data: { boardId, memberId, role },
-        include: { user: true },
+        include: { user: publicUser },
     });
 
 export const updateBoardMemberRole = (boardId: number, memberId: number, role: "ADMIN" | "EMPLOYEE") =>

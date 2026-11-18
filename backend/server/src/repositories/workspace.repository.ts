@@ -1,15 +1,20 @@
 import prisma from "../../../shared/db/client";
+import { publicUser } from "./select";
 
 export const findAllWorkspacesForUser = (userId: number) =>
     prisma.workspace.findMany({
         where: { members: { some: { memberId: userId } } },
-        include: { members: { include: { user: true } } },
+        include: { members: { include: { user: publicUser } } },
     });
 
-export const findWorkspaceById = (workspaceId: number) =>
+/** Only the boards `userId` is a member of: board access is per board, even inside one workspace. */
+export const findWorkspaceById = (workspaceId: number, userId: number) =>
     prisma.workspace.findUnique({
         where: { id: workspaceId },
-        include: { boards: true, members: { include: { user: true } } },
+        include: {
+            boards: { where: { members: { some: { memberId: userId } } } },
+            members: { include: { user: publicUser } },
+        },
     });
 
 export const createWorkspace = (data: { name: string; description?: string; userId: number }) =>

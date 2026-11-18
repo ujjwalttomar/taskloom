@@ -1,4 +1,5 @@
 import prisma from "../../../shared/db/client";
+import { publicUser } from "./select";
 
 export const findAllCards = (listId: number) =>
     prisma.card.findMany({ where: { listId }, orderBy: { order: "asc" } });
@@ -7,9 +8,9 @@ export const findCardById = (cardId: number) =>
     prisma.card.findUnique({
         where: { id: cardId },
         include: {
-            comments: { orderBy: { createdAt: "desc" }, include: { creator: true } },
-            assignedTo: { include: { user: true } },
-            creator: true,
+            comments: { orderBy: { createdAt: "desc" }, include: { creator: publicUser } },
+            assignedTo: { include: { user: publicUser } },
+            creator: publicUser,
             list: true,
         },
     });
@@ -48,7 +49,7 @@ export const findAssignment = (cardId: number, userId: number) =>
     prisma.assignedCard.findUnique({ where: { cardId_userId: { cardId, userId } } });
 
 export const createAssignment = (cardId: number, userId: number) =>
-    prisma.assignedCard.create({ data: { cardId, userId }, include: { user: true } });
+    prisma.assignedCard.create({ data: { cardId, userId }, include: { user: publicUser } });
 
 export const deleteAssignment = (cardId: number, userId: number) =>
     prisma.assignedCard.delete({ where: { cardId_userId: { cardId, userId } } });

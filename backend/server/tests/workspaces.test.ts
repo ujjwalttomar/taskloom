@@ -63,3 +63,22 @@ describe("removing a workspace member revokes their board access (C4)", () => {
         expect(publishBoardEvent).toHaveBeenCalledWith(board.id, admin.id, expect.objectContaining({ type: "member_removed", memberId: employee.id }));
     });
 });
+
+describe("workspaces: payloads (L1)", () => {
+    it("member users expose only id / name / email, and a workspace lists only the boards you're on", async () => {
+        const { workspace, board, admin, employee } = await createBoardFixture();
+        const adminOnly = (await as(admin).post(`/api/workspaces/${workspace.id}/boards`, { title: "Admins only" }).expect(201)).body.board;
+
+        const all = (await as(employee).get("/api/workspaces").expect(200)).body.workspaces;
+        const mine = all.find((w: { id: number }) => w.id === workspace.id);
+        for (const m of mine.members) expect(Object.keys(m.user).sort()).toEqual(["email", "id", "name"]);
+
+        const one = (await as(employee).get(`/api/workspaces/${workspace.id}`).expect(200)).body.workspace;
+        for (const m of one.members) expect(Object.keys(m.user).sort()).toEqual(["email", "id", "name"]);
+        expect(one.boards.map((b: { id: number }) => b.id)).toEqual([board.id]);          // not adminOnly
+
+        const asAdmin = (await as(admin).get(`/api/workspaces/${workspace.id}`).expect(200)).body.workspace;
+        expect(asAdmin.boards.map((b: { id: number }) => b.id).sort()).toEqual([board.id, adminOnly.id].sort());
+    });
+});
+

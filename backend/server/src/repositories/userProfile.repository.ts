@@ -1,10 +1,11 @@
 import prisma from "../../../shared/db/client";
+import { publicUser } from "./select";
 
 // Get a user's board membership + their role in the board
 export const findBoardMember = (boardId: number, userId: number) =>
     prisma.boardMember.findUnique({
         where: { boardId_memberId: { boardId, memberId: userId } },
-        include: { user: true },
+        include: { user: publicUser },
     });
 
 // Get all cards assigned to a user in a specific board
@@ -27,7 +28,7 @@ export const findAssignedCardsInBoard = (boardId: number, userId: number) =>
 export const findWorkspaceMembership = (workspaceId: number, userId: number) =>
     prisma.workspaceMember.findUnique({
         where: { workspaceId_memberId: { workspaceId, memberId: userId } },
-        include: { user: true },
+        include: { user: publicUser },
     });
 
 // Get all boards in a workspace that a user is a member of, with their role in each

@@ -7,8 +7,8 @@ export async function getAllWorkspaces(userId: number) {
     return repo.findAllWorkspacesForUser(userId);
 }
 
-export async function getWorkspace(workspaceId: number) {
-    const workspace = await repo.findWorkspaceById(workspaceId);
+export async function getWorkspace(workspaceId: number, userId: number) {
+    const workspace = await repo.findWorkspaceById(workspaceId, userId);
     if (!workspace) throw new AppError(404, "Workspace not found");
     return workspace;
 }
