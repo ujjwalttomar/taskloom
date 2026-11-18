@@ -456,6 +456,10 @@ export function BoardPage() {
         }
     };
 
+    // Board admins can rename/delete the board, manage members and delete lists.
+    // The server enforces this anyway; hiding the controls avoids confusing 403s for employees.
+    const isBoardAdmin = board?.members.find((m) => m.memberId === user?.id)?.role === "ADMIN";
+
     // DragOverlay content
     const activeList = activeListId ? lists.find((l) => l.id === activeListId) : null;
     const activeCard = activeCardId
@@ -508,8 +512,8 @@ export function BoardPage() {
                         <h1 className="text-white font-semibold text-sm">{board?.title}</h1>
                     )}
 
-                    {/* Board 3-dot menu */}
-                    <div className="relative">
+                    {/* Board 3-dot menu (rename / delete — board admins only) */}
+                    {isBoardAdmin && (<div className="relative">
                         <button
                             onClick={() => setShowBoardMenu(!showBoardMenu)}
                             className="text-slate-600 hover:text-white transition-colors p-1 rounded"
@@ -540,7 +544,7 @@ export function BoardPage() {
                                 </button>
                             </div>
                         )}
-                    </div>
+                    </div>)}
                 </div>
 
                 <div className="ml-auto flex items-center gap-3">
@@ -629,6 +633,7 @@ export function BoardPage() {
                                             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${m.role === "ADMIN" ? "bg-accent/20 text-accent" : "bg-bg text-slate-400"}`}>
                                                 {m.role === "ADMIN" ? "Admin" : "Employee"}
                                             </span>
+                                            {isBoardAdmin && (<>
                                             <button
                                                 onClick={async () => {
                                                     const newRole = m.role === "ADMIN" ? "EMPLOYEE" : "ADMIN";
@@ -661,11 +666,13 @@ export function BoardPage() {
                                                     </svg>
                                                 )}
                                             </button>
+                                            </>)}
                                         </div>
                                     ))}
                                 </div>
 
-                                {/* Add member form */}
+                                {/* Add member form (board admins only) */}
+                                {isBoardAdmin && (
                                 <div className="px-4 py-3 border-t border-border">
                                     <p className="text-slate-400 text-xs mb-2">Add workspace member to board</p>
                                     <div className="flex gap-1.5 mb-1.5">
@@ -697,6 +704,7 @@ export function BoardPage() {
                                         {addMemberLoading ? "Adding..." : "Add to board"}
                                     </button>
                                 </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -728,6 +736,7 @@ export function BoardPage() {
                                     onListDeleted={handleListDeleted}
                                     onListRenamed={handleListRenamed}
                                     isDragging={activeListId === list.id}
+                                    canDelete={isBoardAdmin}
                                 />
                             ))}
                         </SortableContext>
@@ -806,6 +815,7 @@ export function BoardPage() {
                     onCardUpdated={handleCardUpdated}
                     onCardDeleted={handleCardDeleted}
                     boardMembers={board?.members ?? []}
+                    isBoardAdmin={isBoardAdmin}
                     onAssigneesChanged={handleAssigneesChanged}
                     subscribeCardEvents={subscribeCardEvents}
                 />

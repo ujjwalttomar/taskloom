@@ -64,9 +64,11 @@ interface ListProps {
     onListDeleted: (listId: number) => void;
     onListRenamed: (listId: number, title: string) => void;
     isDragging?: boolean;
+    /** Deleting a list needs board admin (renaming doesn't) */
+    canDelete?: boolean;
 }
 
-export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted, onListRenamed, isDragging }: ListProps) {
+export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted, onListRenamed, isDragging, canDelete = false }: ListProps) {
     const [addingCard, setAddingCard] = useState(false);
     const [newCardTitle, setNewCardTitle] = useState("");
     const [editingTitle, setEditingTitle] = useState(false);
@@ -197,12 +199,14 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
                             >
                                 Rename list
                             </button>
-                            <button
-                                onClick={handleDeleteList}
-                                className="w-full text-left px-3 py-2 text-red-400 hover:text-red-300 hover:bg-border/50 text-xs transition-colors"
-                            >
-                                Delete list
-                            </button>
+                            {canDelete && (
+                                <button
+                                    onClick={handleDeleteList}
+                                    className="w-full text-left px-3 py-2 text-red-400 hover:text-red-300 hover:bg-border/50 text-xs transition-colors"
+                                >
+                                    Delete list
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>

@@ -11,13 +11,15 @@ interface CardModalProps {
     onCardDeleted: (cardId: number) => void;
     /** Board members (already loaded by BoardPage) — used for the assignee chips */
     boardMembers: BoardMember[];
+    /** Admins can assign anyone and delete any comment; employees only themselves / their own */
+    isBoardAdmin: boolean;
     /** Tell the board when assignees change, so the avatars on the card update too */
     onAssigneesChanged: (cardId: number, assignedTo: AssignedCard[]) => void;
     /** Live events from the board's WebSocket; returns an unsubscribe function */
     subscribeCardEvents?: (listener: (event: WsEvent) => void) => () => void;
 }
 
-export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, boardMembers, onAssigneesChanged, subscribeCardEvents }: CardModalProps) {
+export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, boardMembers, isBoardAdmin, onAssigneesChanged, subscribeCardEvents }: CardModalProps) {
     const { user } = useAuth();
     const [card, setCard] = useState<Card | null>(null);
     const [loading, setLoading] = useState(true);
@@ -256,17 +258,19 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, board
                                         {boardMembers.map((m) => {
                                             const isAssigned = (card.assignedTo ?? []).some((a) => a.userId === m.memberId);
                                             const isLoading = assignLoading === m.memberId;
+                                            // Employees may only assign/unassign themselves (server rule)
+                                            const canToggle = isBoardAdmin || m.memberId === user?.id;
                                             return (
                                                 <button
                                                     key={m.memberId}
                                                     onClick={() => handleToggleAssign(m.memberId)}
-                                                    disabled={isLoading}
+                                                    disabled={isLoading || !canToggle}
                                                     className={`flex items-center gap-2 border rounded-full px-3 py-1 text-xs transition-all ${
                                                         isAssigned
                                                             ? "bg-accent/20 border-accent text-white"
                                                             : "bg-elevated border-border text-slate-400 hover:border-slate-500 hover:text-white"
                                                     }`}
-                                                    title={isAssigned ? "Click to unassign" : "Click to assign"}
+                                                    title={!canToggle ? "Only board admins can assign other people" : isAssigned ? "Click to unassign" : "Click to assign"}
                                                 >
                                                     <div
                                                         className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
@@ -376,6 +380,7 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, board
                                                 key={comment.id}
                                                 comment={comment}
                                                 currentUserId={user?.id ?? 0}
+                                                canDeleteAny={isBoardAdmin}
                                                 editingId={editingCommentId}
                                                 editText={editCommentText}
                                                 onEdit={(id, text) => { setEditingCommentId(id); setEditCommentText(text); }}
@@ -399,6 +404,8 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, board
 interface CommentItemProps {
     comment: Comment;
     currentUserId: number;
+    /** Board admins can delete anyone's comment (editing stays creator-only) */
+    canDeleteAny: boolean;
     editingId: number | null;
     editText: string;
     onEdit: (id: number, text: string) => void;
@@ -408,7 +415,7 @@ interface CommentItemProps {
     onDelete: (id: number) => void;
 }
 
-function CommentItem({ comment, currentUserId, editingId, editText, onEdit, onEditChange, onEditSave, onEditCancel, onDelete }: CommentItemProps) {
+function CommentItem({ comment, currentUserId, canDeleteAny, editingId, editText, onEdit, onEditChange, onEditSave, onEditCancel, onDelete }: CommentItemProps) {
     const isOwner = comment.creatorId === currentUserId;
 
     return (
@@ -453,8 +460,9 @@ function CommentItem({ comment, currentUserId, editingId, editText, onEdit, onEd
                 ) : (
                     <div className="group relative">
                         <p className="text-slate-300 text-sm leading-relaxed">{comment.text}</p>
-                        {isOwner && (
+                        {(isOwner || canDeleteAny) && (
                             <div className="flex gap-2 mt-1">
+                                {isOwner && (<>
                                 <button
                                     onClick={() => onEdit(comment.id, comment.text)}
                                     className="text-slate-600 hover:text-slate-400 text-xs transition-colors"
@@ -462,6 +470,7 @@ function CommentItem({ comment, currentUserId, editingId, editText, onEdit, onEd
                                     Edit
                                 </button>
                                 <span className="text-slate-700">·</span>
+                                </>)}
                                 <button
                                     onClick={() => onDelete(comment.id)}
                                     className="text-slate-600 hover:text-red-400 text-xs transition-colors"
