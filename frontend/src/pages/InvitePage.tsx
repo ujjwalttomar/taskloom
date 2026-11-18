@@ -23,7 +23,7 @@ export function InvitePage() {
         if (!token) return;
         api.invites.getDetails(token)
             .then((data) => setDetails(data))
-            .catch((err) => setError(err.response?.data?.message || "Invalid or expired invite"))
+            .catch((err) => setError(err.message || "Invalid or expired invite"))
             .finally(() => setLoading(false));
     }, [token]);
 
@@ -35,7 +35,7 @@ export function InvitePage() {
             setAccepted(true);
             setTimeout(() => navigate(`/dashboard`), 1500);
         } catch (err: any) {
-            setError(err.response?.data?.message || "Could not accept invite");
+            setError(err.message || "Could not accept invite"); // was err.response?.data (an Axios idiom — always undefined with fetch)
         } finally {
             setAccepting(false);
         }

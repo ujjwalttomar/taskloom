@@ -59,6 +59,7 @@ export function BoardPage() {
     const [addingList, setAddingList] = useState(false);
     const [newListTitle, setNewListTitle] = useState("");
     const [submitting, setSubmitting] = useState(false);
+    const [addListError, setAddListError] = useState("");
 
     // DnD active item tracking
     const [activeListId, setActiveListId] = useState<number | null>(null);
@@ -363,11 +364,17 @@ export function BoardPage() {
     const handleAddList = async () => {
         if (!newListTitle.trim()) return;
         setSubmitting(true);
-        const data = await api.lists.create(boardId, { title: newListTitle.trim() });
-        setLists((prev) => [...prev, { ...data.list, cards: [] }]);
-        setNewListTitle("");
-        setAddingList(false);
-        setSubmitting(false);
+        setAddListError("");
+        try {
+            const data = await api.lists.create(boardId, { title: newListTitle.trim() });
+            setLists((prev) => [...prev, { ...data.list, cards: [] }]);
+            setNewListTitle("");
+            setAddingList(false);
+        } catch (e) {
+            setAddListError((e as Error).message || "Couldn't add the list"); // was: stuck on "Adding..."
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const handleCardCreated = (listId: number, card: Card) => {
@@ -757,6 +764,7 @@ export function BoardPage() {
                                         }}
                                         className="w-full bg-elevated border border-border rounded-xl px-3 py-2.5 text-white placeholder-slate-600 text-sm outline-none focus:border-accent/50 transition-colors"
                                     />
+                                    {addListError && <p className="text-xs text-red-400">{addListError}</p>}
                                     <div className="flex gap-2">
                                         <button
                                             onClick={handleAddList}

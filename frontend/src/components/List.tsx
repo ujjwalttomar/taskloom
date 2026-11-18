@@ -75,6 +75,7 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
     const [titleValue, setTitleValue] = useState(list.title);
     const [submitting, setSubmitting] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [error, setError] = useState("");
 
     // Sortable — only the drag handle gets listeners, outer div gets setNodeRef + transform
     const {
@@ -103,11 +104,14 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
     const handleAddCard = async () => {
         if (!newCardTitle.trim()) return;
         setSubmitting(true);
+        setError("");
         try {
             const data = await api.cards.create(list.id, { title: newCardTitle.trim() });
             onCardCreated(list.id, data.card);
             setNewCardTitle("");
             setAddingCard(false);
+        } catch (e) {
+            setError((e as Error).message || "Couldn't add the card");
         } finally {
             setSubmitting(false);
         }
@@ -119,16 +123,28 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
             setEditingTitle(false);
             return;
         }
-        await api.lists.update(boardId, list.id, { title: titleValue.trim() });
-        onListRenamed(list.id, titleValue.trim());
-        setEditingTitle(false);
+        setError("");
+        try {
+            await api.lists.update(boardId, list.id, { title: titleValue.trim() });
+            onListRenamed(list.id, titleValue.trim());
+        } catch (e) {
+            setTitleValue(list.title); // put the old name back
+            setError((e as Error).message || "Couldn't rename the list");
+        } finally {
+            setEditingTitle(false);
+        }
     };
 
     const handleDeleteList = async () => {
         if (!confirm(`Delete list "${list.title}" and all its cards?`)) return;
         setMenuOpen(false);
-        await api.lists.delete(boardId, list.id);
-        onListDeleted(list.id);
+        setError("");
+        try {
+            await api.lists.delete(boardId, list.id);
+            onListDeleted(list.id);
+        } catch (e) {
+            setError((e as Error).message || "Couldn't delete the list");
+        }
     };
 
     return (
@@ -215,6 +231,8 @@ export function List({ list, boardId, onCardCreated, onCardClick, onListDeleted,
             <span className="px-4 pb-2 text-xs text-slate-600">
                 {list.cards.length} card{list.cards.length !== 1 ? "s" : ""}
             </span>
+
+            {error && <p className="px-4 pb-2 text-xs text-red-400">{error}</p>}
 
             {/* Cards — droppable + sortable */}
             <div ref={setDropRef} className="flex flex-col gap-2 px-3 overflow-y-auto flex-1 pb-2 min-h-[8px]">

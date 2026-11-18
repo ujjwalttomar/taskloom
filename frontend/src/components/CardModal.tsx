@@ -36,6 +36,17 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, board
     const [editCommentText, setEditCommentText] = useState("");
 
     const [assignLoading, setAssignLoading] = useState<number | null>(null);
+    const [actionError, setActionError] = useState("");
+
+    /** Runs a modal action and shows its error inline (before: unhandled rejections, nothing shown) */
+    const run = async (action: () => Promise<void>) => {
+        setActionError("");
+        try {
+            await action();
+        } catch (e) {
+            setActionError((e as Error).message || "Something went wrong");
+        }
+    };
 
     // Only the card is fetched — members come from the board (this used to refetch the whole board)
     useEffect(() => {
@@ -88,7 +99,7 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, board
         });
     }, [subscribeCardEvents, cardId, onClose]);
 
-    const handleSaveTitle = async () => {
+    const handleSaveTitle = () => run(async () => {
         if (!card || !titleValue.trim() || titleValue === card.title) {
             setEditingTitle(false);
             return;
@@ -98,29 +109,31 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, board
         setCard((prev) => (prev ? { ...prev, ...data.card } : prev));
         onCardUpdated(data.card);
         setEditingTitle(false);
-    };
+    });
 
-    const handleSaveDesc = async () => {
+    const handleSaveDesc = () => run(async () => {
         if (!card) return;
         const data = await api.cards.update(cardId, { description: descValue });
         setCard((prev) => (prev ? { ...prev, ...data.card } : prev));
         onCardUpdated(data.card);
         setEditingDesc(false);
-    };
+    });
 
     const handleAddComment = async () => {
         if (!newComment.trim() || !card) return;
         setSubmittingComment(true);
-        const data = await api.comments.create(cardId, { text: newComment.trim() });
-        setCard((prev) => prev ? {
-            ...prev,
-            comments: [data.comment, ...(prev.comments || [])],
-        } : prev);
-        setNewComment("");
-        setSubmittingComment(false);
+        await run(async () => {
+            const data = await api.comments.create(cardId, { text: newComment.trim() });
+            setCard((prev) => prev ? {
+                ...prev,
+                comments: [data.comment, ...(prev.comments || [])],
+            } : prev);
+            setNewComment("");
+        });
+        setSubmittingComment(false); // always reset (was stuck on "Posting..." after an error)
     };
 
-    const handleEditComment = async (commentId: number) => {
+    const handleEditComment = (commentId: number) => run(async () => {
         if (!editCommentText.trim()) return;
         const data = await api.comments.update(commentId, { text: editCommentText.trim() });
         setCard((prev) => prev ? {
@@ -128,22 +141,22 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, board
             comments: prev.comments?.map((c) => c.id === commentId ? data.comment : c),
         } : prev);
         setEditingCommentId(null);
-    };
+    });
 
-    const handleDeleteComment = async (commentId: number) => {
+    const handleDeleteComment = (commentId: number) => run(async () => {
         await api.comments.delete(commentId);
         setCard((prev) => prev ? {
             ...prev,
             comments: prev.comments?.filter((c) => c.id !== commentId),
         } : prev);
-    };
+    });
 
-    const handleDeleteCard = async () => {
+    const handleDeleteCard = () => run(async () => {
         if (!confirm("Delete this card?")) return;
         await api.cards.delete(cardId);
         onCardDeleted(cardId);
         onClose();
-    };
+    });
 
     const handleToggleAssign = async (memberId: number) => {
         if (!card) return;
@@ -160,8 +173,8 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, board
             }
             setCard((prev) => (prev ? { ...prev, assignedTo } : prev));
             onAssigneesChanged(cardId, assignedTo); // so the avatars on the board card update too
-        } catch (e: any) {
-            alert(e.message || "Failed");
+        } catch (e) {
+            setActionError((e as Error).message || "Couldn't change the assignee");
         } finally {
             setAssignLoading(null);
         }
@@ -248,6 +261,10 @@ export function CardModal({ cardId, onClose, onCardUpdated, onCardDeleted, board
                         </div>
 
                         <div className="p-6 flex flex-col gap-6">
+                            {actionError && (
+                                <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{actionError}</p>
+                            )}
+
                             {/* Assignees */}
                             <section>
                                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Assignees</h3>

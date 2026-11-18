@@ -21,6 +21,8 @@ export function DashboardPage() {
     const [wsName, setWsName] = useState("");
     const [boardTitle, setBoardTitle] = useState("");
     const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState("");
+    const [loadError, setLoadError] = useState("");
 
     // Edit workspace
     const [editingWsName, setEditingWsName] = useState(false);
@@ -52,22 +54,26 @@ export function DashboardPage() {
     };
 
     useEffect(() => {
-        api.workspaces.getAll().then((data) => {
-            setWorkspaces(data.workspaces);
-            if (data.workspaces.length > 0) {
-                setSelectedWorkspace(data.workspaces[0]!);
-            }
-            setLoading(false);
-        });
+        api.workspaces.getAll()
+            .then((data) => {
+                setWorkspaces(data.workspaces);
+                if (data.workspaces.length > 0) {
+                    setSelectedWorkspace(data.workspaces[0]!);
+                }
+            })
+            .catch((e) => setLoadError(e.message || "Couldn't load your workspaces")) // was: spinner forever
+            .finally(() => setLoading(false));
     }, []);
 
     useEffect(() => {
         if (!selectedWorkspace) return;
+        let cancelled = false; // switching workspaces quickly must not show the previous one's boards
         setBoardsLoading(true);
-        api.boards.getAll(selectedWorkspace.id).then((data) => {
-            setBoards(data.boards);
-            setBoardsLoading(false);
-        });
+        api.boards.getAll(selectedWorkspace.id)
+            .then((data) => { if (!cancelled) setBoards(data.boards); })
+            .catch((e) => { if (!cancelled) setLoadError(e.message || "Couldn't load boards"); })
+            .finally(() => { if (!cancelled) setBoardsLoading(false); });
+        return () => { cancelled = true; };
     }, [selectedWorkspace]);
 
     // Reset tab when switching workspace
@@ -81,21 +87,33 @@ export function DashboardPage() {
     const createWorkspace = async () => {
         if (!wsName.trim()) return;
         setCreating(true);
-        const data = await api.workspaces.create({ name: wsName.trim() });
-        setWsName("");
-        setShowCreateWorkspace(false);
-        setCreating(false);
-        await refreshWorkspaces(data.workspace.id);
+        setCreateError("");
+        try {
+            const data = await api.workspaces.create({ name: wsName.trim() });
+            setWsName("");
+            setShowCreateWorkspace(false);
+            await refreshWorkspaces(data.workspace.id);
+        } catch (e) {
+            setCreateError((e as Error).message || "Couldn't create the workspace");
+        } finally {
+            setCreating(false); // was stuck on "Creating..." after an error
+        }
     };
 
     const createBoard = async () => {
         if (!boardTitle.trim() || !selectedWorkspace) return;
         setCreating(true);
-        const data = await api.boards.create(selectedWorkspace.id, { title: boardTitle.trim() });
-        setBoards((prev) => [...prev, data.board]);
-        setBoardTitle("");
-        setShowCreateBoard(false);
-        setCreating(false);
+        setCreateError("");
+        try {
+            const data = await api.boards.create(selectedWorkspace.id, { title: boardTitle.trim() });
+            setBoards((prev) => [...prev, data.board]);
+            setBoardTitle("");
+            setShowCreateBoard(false);
+        } catch (e) {
+            setCreateError((e as Error).message || "Couldn't create the board");
+        } finally {
+            setCreating(false);
+        }
     };
 
     const handleAdd = async () => {
@@ -301,6 +319,9 @@ export function DashboardPage() {
 
             {/* Main */}
             <main className="flex-1 overflow-auto">
+                {loadError && (
+                    <p className="m-6 mb-0 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{loadError}</p>
+                )}
                 {!selectedWorkspace ? (
                     <div className="flex flex-col items-center justify-center h-full gap-4">
                         <div className="w-16 h-16 bg-elevated rounded-2xl flex items-center justify-center">
@@ -625,6 +646,7 @@ export function DashboardPage() {
                         onKeyDown={(e) => e.key === "Enter" && createWorkspace()}
                         className="w-full bg-elevated border border-border rounded-lg px-3 py-2.5 text-white placeholder-slate-500 text-sm outline-none focus:border-accent/50 transition-colors"
                     />
+                    {createError && <p className="mt-3 text-xs text-red-400">{createError}</p>}
                     <div className="flex gap-2 mt-4">
                         <button
                             onClick={() => setShowCreateWorkspace(false)}
@@ -655,6 +677,7 @@ export function DashboardPage() {
                         onKeyDown={(e) => e.key === "Enter" && createBoard()}
                         className="w-full bg-elevated border border-border rounded-lg px-3 py-2.5 text-white placeholder-slate-500 text-sm outline-none focus:border-accent/50 transition-colors"
                     />
+                    {createError && <p className="mt-3 text-xs text-red-400">{createError}</p>}
                     <div className="flex gap-2 mt-4">
                         <button
                             onClick={() => setShowCreateBoard(false)}
