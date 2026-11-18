@@ -141,7 +141,7 @@ cd frontend       && npm run dev     # App       → http://localhost:5173
 
 | Where | What | How to run |
 |---|---|---|
-| `backend/server/tests/` | **82 integration and unit tests** through the real Express app and a real Postgres database. They cover permissions, every role rule, the OAuth callback, refresh tokens, invites, card ordering and rate limits. | `cd backend/server && npm test` |
+| `backend/server/tests/` | **84 integration and unit tests** through the real Express app and a real Postgres database. They cover permissions, every role rule, the OAuth callback, refresh tokens, invites, card ordering and rate limits. | `cd backend/server && npm test` |
 | `frontend/src/api/client.test.ts` | **10 tests** for the API client: one shared token refresh, session expiry, error messages | `cd frontend && npm test` |
 
 The backend tests need their **own** database. Copy `backend/server/.env.test.example` to `.env.test` and point it at a local database whose name ends in `_test`. The test config refuses to run against anything else, so the tests can't touch Supabase or your dev data. The tables are created automatically, and nothing is ever deleted.
