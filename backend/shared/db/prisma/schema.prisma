@@ -1,6 +1,8 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider      = "prisma-client"
+  output        = "../generated/prisma"
+  // native = this machine; debian-openssl-3.0.x = Render's runtime (from GitHub master, c1f5085 era)
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

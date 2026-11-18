@@ -1,4 +1,6 @@
-const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+// Unset in production → same-origin requests, which vercel.json proxies to the API. That makes the
+// auth cookies first-party (needed for Safari/Firefox, H3). Unset in dev → the local API.
+const BASE = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:3000" : "");
 
 /** Fired when the session can't be refreshed; AuthProvider listens and logs the user out. */
 export const SESSION_EXPIRED_EVENT = "taskloom:session-expired";

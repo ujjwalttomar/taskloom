@@ -1,7 +1,8 @@
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+// Same rule as api/client.ts: production defaults to same-origin (the Vercel proxy)
+const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? "http://localhost:3000" : "");
 
 // Codes sent back by the server as /?authError=<code>
 const AUTH_ERRORS: Record<string, string> = {
