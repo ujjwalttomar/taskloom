@@ -49,6 +49,5 @@ app.use(errorHandler);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log("RESEND_API_KEY present:", !!process.env.RESEND_API_KEY);
-    console.log("EMAIL_FROM:", process.env.EMAIL_FROM || "onboarding@resend.dev (default)");
+    if (!process.env.RESEND_API_KEY) console.warn("Email disabled: RESEND_API_KEY not set (invites still return a link)");
 });

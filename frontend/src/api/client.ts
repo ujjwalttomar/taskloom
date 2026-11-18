@@ -59,7 +59,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
     auth: {
         me: () => request<{ user: import("../types").User }>("/auth/me"),
-        refresh: () => request<{ message: string }>("/auth/refresh", { method: "POST" }),
         logout: () => request<{ message: string }>("/auth/logout", { method: "POST" }),
         // Short-lived token for the WebSocket server (the auth cookie never reaches its host)
         wsTicket: () => request<{ ticket: string }>("/auth/ws-ticket"),
@@ -69,7 +68,6 @@ export const api = {
 
     workspaces: {
         getAll: () => request<{ workspaces: import("../types").Workspace[] }>("/api/workspaces"),
-        getOne: (id: number) => request<{ workspace: import("../types").Workspace }>(`/api/workspaces/${id}`),
         create: (data: { name: string; description?: string }) =>
             request<{ workspace: import("../types").Workspace }>("/api/workspaces", {
                 method: "POST",
@@ -81,8 +79,6 @@ export const api = {
                 body: JSON.stringify(data),
             }),
         delete: (id: number) => request(`/api/workspaces/${id}`, { method: "DELETE" }),
-        addMember: (id: number, data: { email: string; role?: string }) =>
-            request(`/api/workspaces/${id}/members`, { method: "POST", body: JSON.stringify(data) }),
         updateMemberRole: (id: number, memberId: number, role: string) =>
             request(`/api/workspaces/${id}/members/${memberId}`, {
                 method: "PATCH",

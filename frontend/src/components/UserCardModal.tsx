@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { BoardProfile, WorkspaceProfile } from "../types";
+import { stringToColor } from "../utils/color";
 
 interface Props {
     userId: number;
@@ -10,12 +11,6 @@ interface Props {
     onClose: () => void;
 }
 
-function stringToColor(str: string): string {
-    const palette = ["#6366f1","#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#ec4899","#14b8a6","#3b82f6","#f97316"];
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    return palette[Math.abs(hash) % palette.length]!;
-}
 
 export function UserCardModal({ userId, boardId, workspaceId, isOnline, onClose }: Props) {
     const [boardProfile, setBoardProfile] = useState<BoardProfile | null>(null);

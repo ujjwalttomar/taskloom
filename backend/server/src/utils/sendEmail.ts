@@ -16,7 +16,5 @@ export async function sendEmail(to: string, subject: string, html: string) {
         body: JSON.stringify({ from, to, subject, html }),
     });
 
-    const body = await res.text();
-    if (!res.ok) throw new Error(`Resend ${res.status}: ${body}`);
-    console.log(`Resend accepted email to ${to}: ${body}`);
+    if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
 }

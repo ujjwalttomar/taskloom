@@ -32,16 +32,4 @@ body {
     background: rgba(255, 255, 255, 0.2);
 }
 
-.board-scroll {
-    overflow-x: auto;
-    overflow-y: hidden;
-    display: flex;
-    gap: 12px;
-    padding: 0 24px 24px;
-    min-height: 0;
-    flex: 1;
-}
 
-.board-scroll::-webkit-scrollbar {
-    height: 8px;
-}

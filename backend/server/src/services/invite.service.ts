@@ -33,7 +33,6 @@ export async function sendInvite(workspaceId: number, email: string, role: "ADMI
 
     // Fire-and-forget — never block the response on email delivery
     sendEmail(email, subject, html)
-        .then(() => console.log(`Email sent successfully to ${email}`))
         .catch((err) => console.error("Email send failed:", JSON.stringify(err?.message || err)));
 
     return { direct: false as const, inviteUrl };
